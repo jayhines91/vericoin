@@ -16,6 +16,7 @@
 #include <index/txindex.h>
 #include <math.h>
 #include <bignum.h>
+#include <util/devtrace.h>
 #include <util/system.h>
 #include <timedata.h>
 #include <validation.h>
@@ -234,7 +235,7 @@ int64_t GetProofOfStakeReward(int64_t nCoinAge, int64_t nFees, CBlockIndex* pind
 // introduced to help nodes establish a consistent view of the coin
 // age (trust score) of competing branches. PoSTistent view of the coin
 // age (trust score) of competing branches
-bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache &view, uint64_t& nCoinAge, CBlockIndex* pindexPrev)
+bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache &view, uint64_t& nCoinAge, CBlockIndex* pindexPrev, bool fStrictValidation)
 {
     arith_uint256 bnCentSecond = 0;  // coin age in the unit of cent-seconds
     arith_uint256 bnCoinDay = 0;
@@ -253,8 +254,13 @@ bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache &view, uint64_t& n
         const COutPoint &prevout = txin.prevout;
         Coin coin;
 
-        if (!view.GetCoin(prevout, coin))
-            continue;  // previous transaction not in main chain
+        if (!view.GetCoin(prevout, coin)) {
+            if (fStrictValidation) {
+                return error("%s() : prevout %s missing from UTXO view during block validation",
+                             __PRETTY_FUNCTION__, prevout.ToString());
+            }
+            continue;  // previous transaction not in main chain (wallet / partial view)
+        }
 
         if (tx.nTime < coin.nTime)
             return false;  // Transaction timestamp violation
@@ -669,6 +675,9 @@ bool CheckProofOfStake(BlockValidationState &state, CBlockIndex* pindexPrev, con
 //
 bool CheckStakeKernelHash(unsigned int nBits, CBlockIndex* pindexPrev, const CBlockHeader& blockFrom, unsigned int nTxPrevOffset, const CTransactionRef& txPrev, const COutPoint& prevout, unsigned int nTimeTx, uint256& hashProofOfStake, bool fPrintProofOfStake)
 {
+    LogConsensus("%s: prev_height=%d block_from=%s prevout=%s nTimeTx=%u",
+        __func__, pindexPrev ? pindexPrev->nHeight : -1, blockFrom.GetHash().ToString().c_str(),
+        prevout.ToString().c_str(), nTimeTx);
     const Consensus::Params& params = Params().GetConsensus();
     if (nTimeTx < txPrev->nTime)  // Transaction timestamp violation
         return error("CheckStakeKernelHash() : nTime violation");

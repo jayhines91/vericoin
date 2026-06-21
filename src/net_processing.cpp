@@ -1004,6 +1004,10 @@ void Misbehaving(NodeId pnode, int howmuch, const std::string& message) EXCLUSIV
  * @return Returns true if the peer was punished (probably disconnected)
  */
 static bool MaybePunishNodeForBlock(NodeId nodeid, const BlockValidationState& state, bool via_compact_block, const std::string& message = "") {
+    if (IsRecoverableCoinstakeFailureDuringIBD(state)) {
+        return false;
+    }
+
     switch (state.GetResult()) {
     case BlockValidationResult::BLOCK_RESULT_UNSET:
         break;
@@ -1689,6 +1693,10 @@ bool static ProcessHeadersMessage(CNode* pfrom, CConnman* connman, CTxMemPool& m
         return true;
     }
 
+    if (IsChainSyncPausedForBootstrap()) {
+        return true;
+    }
+
     bool received_new_header = false;
     const CBlockIndex *pindexLast = nullptr;
     {
@@ -1738,6 +1746,12 @@ bool static ProcessHeadersMessage(CNode* pfrom, CConnman* connman, CTxMemPool& m
         }
     }
 
+    // Re-check after releasing cs_main: bootstrap may pause sync while msghand
+    // was handling the first section above.
+    if (IsChainSyncPausedForBootstrap()) {
+        return true;
+    }
+
     BlockValidationState state;
     if (!ProcessNewBlockHeaders(headers, state, chainparams, &pindexLast)) {
         if (state.IsInvalid()) {
@@ -1745,6 +1759,13 @@ bool static ProcessHeadersMessage(CNode* pfrom, CConnman* connman, CTxMemPool& m
             return false;
         }
     }
+
+    // ProcessNewBlockHeaders returns success without a pindex when bootstrap pauses
+    // chain sync (headers are intentionally ignored until download finishes).
+    if (!pindexLast) {
+        return true;
+    }
+
     pfrom->lastAcceptedHeader = headers.back().GetHash();
 
     {
@@ -1754,8 +1775,6 @@ bool static ProcessHeadersMessage(CNode* pfrom, CConnman* connman, CTxMemPool& m
             LogPrint(BCLog::NET, "peer=%d: resetting nUnconnectingHeaders (%d -> 0)\n", pfrom->GetId(), nodestate->nUnconnectingHeaders);
         }
         nodestate->nUnconnectingHeaders = 0;
-
-        assert(pindexLast);
         UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
 
         // From here, pindexBestKnownBlock should be guaranteed to be non-null,

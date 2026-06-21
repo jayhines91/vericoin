@@ -26,6 +26,8 @@
 #include <timedata.h>
 #include <txmempool.h>
 #include <util/bip32.h>
+#include <util/activitylog.h>
+#include <util/devtrace.h>
 #include <util/error.h>
 #include <util/moneystr.h>
 #include <util/translation.h>
@@ -542,6 +544,8 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     if (IsCrypted())
         return false;
 
+    LogActivity("Wallet encrypt: starting (large wallets may take several minutes)");
+
     CKeyingMaterial _vMasterKey;
 
     _vMasterKey.resize(WALLET_CRYPTO_KEY_SIZE);
@@ -621,6 +625,7 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
         }
         Lock();
 
+        LogActivity("Wallet encrypt: rewriting wallet database on disk");
         // Need to completely rewrite the wallet file; if we don't, bdb might keep
         // bits of the unencrypted private key in slack space in the database file.
         database->Rewrite();
@@ -633,6 +638,7 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
     }
     NotifyStatusChanged(this);
 
+    LogActivity("Wallet encrypt: complete");
     return true;
 }
 
@@ -1001,7 +1007,6 @@ void CWallet::MarkInputsDirty(const CTransactionRef& tx)
 
 bool CWallet::AbandonTransaction(const uint256& hashTx)
 {
-    auto locked_chain = chain().lock(); // Temporary. Removed in upcoming lock cleanup
     LOCK(cs_wallet);
 
     WalletBatch batch(*database, "r+");
@@ -1056,7 +1061,6 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
 
 void CWallet::MarkConflicted(const uint256& hashBlock, int conflicting_height, const uint256& hashTx)
 {
-    auto locked_chain = chain().lock();
     LOCK(cs_wallet);
 
     int conflictconfirms = (m_last_block_processed_height - conflicting_height + 1) * -1;
@@ -1758,6 +1762,7 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
         if (GetTime() >= nNow + 60) {
             nNow = GetTime();
             WalletLogPrintf("Still rescanning. At block %d. Progress=%f\n", *block_height, progress_current);
+            LogActivity("Wallet rescan progress: block=%d pct=%.1f", *block_height, m_scanning_progress * 100.0);
         }
 
         CBlock block;
@@ -1841,7 +1846,7 @@ void CWallet::ReacceptWalletTransactions()
             if (wtx.IsCoinBase() || wtx.IsCoinStake()) {
                 LogPrintf("Abandoning wtx %s\n", wtx.GetHash().ToString());
                 AbandonTransaction(wtxid);
-                }
+            }
             else
                 mapSorted.insert(std::make_pair(wtx.nOrderPos, &wtx));
         }
@@ -3528,7 +3533,7 @@ bool ReserveDestination::GetReservedDestination(CTxDestination& dest, bool inter
         return false;
     }
 
-
+    LOCK(pwallet->cs_wallet);
     if (nIndex == -1)
     {
         m_spk_man->TopUp();
@@ -4053,6 +4058,9 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
     {
         chain.initMessage(_("Rescanning...").translated);
         walletInstance->WalletLogPrintf("Rescanning last %i blocks (from block %i)...\n", *tip_height - rescan_height, rescan_height);
+        LogActivity("Wallet rescan begin: wallet=%s from_height=%d to_height=%d blocks=%d rescan_flag=%s",
+            walletFile.c_str(), rescan_height, *tip_height, *tip_height - rescan_height,
+            gArgs.GetBoolArg("-rescan", false) ? "true" : "false");
 
         // No need to read and scan block if block was created before
         // our wallet birthday (as adjusted for block time variability)
@@ -4070,10 +4078,27 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
 
         {
             WalletRescanReserver reserver(walletInstance.get());
-            if (!reserver.reserve() || (ScanResult::SUCCESS != walletInstance->ScanForWalletTransactions(locked_chain->getBlockHash(rescan_height), {} /* stop block */, reserver, true /* update */).status)) {
+            if (!reserver.reserve()) {
+                LogActivityEx(ActivityLevel::Error, __FILE__, __LINE__, __func__,
+                    "Wallet rescan failed: could not reserve rescan lock (wallet=%s)", walletFile.c_str());
                 error = _("Failed to rescan the wallet during initialization").translated;
                 return nullptr;
             }
+            const ScanResult scan_result = walletInstance->ScanForWalletTransactions(
+                locked_chain->getBlockHash(rescan_height), {} /* stop block */, reserver, true /* update */);
+            if (ScanResult::SUCCESS != scan_result.status) {
+                const char* status_label = scan_result.status == ScanResult::USER_ABORT ? "USER_ABORT" : "FAILURE";
+                LogActivityEx(ActivityLevel::Error, __FILE__, __LINE__, __func__,
+                    "Wallet rescan failed: wallet=%s status=%s last_scanned_height=%s last_failed_block=%s",
+                    walletFile.c_str(), status_label,
+                    scan_result.last_scanned_height ? strprintf("%d", *scan_result.last_scanned_height).c_str() : "none",
+                    scan_result.last_failed_block.IsNull() ? "none" : scan_result.last_failed_block.ToString().c_str());
+                error = _("Failed to rescan the wallet during initialization").translated;
+                return nullptr;
+            }
+            LogActivity("Wallet rescan complete: wallet=%s last_height=%s",
+                walletFile.c_str(),
+                scan_result.last_scanned_height ? strprintf("%d", *scan_result.last_scanned_height).c_str() : "none");
         }
         walletInstance->chainStateFlushed(locked_chain->getTipLocator());
         walletInstance->database->IncrementUpdateCounter();

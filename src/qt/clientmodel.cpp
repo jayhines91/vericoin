@@ -11,6 +11,8 @@
 
 #include <clientversion.h>
 #include <interfaces/handler.h>
+#include <util/devhelperconfig.h>
+#include <util/devedition.h>
 #include <interfaces/node.h>
 #include <net.h>
 #include <netbase.h>
@@ -154,6 +156,10 @@ BanTableModel *ClientModel::getBanTableModel()
 
 QString ClientModel::formatFullVersion() const
 {
+#if ENABLE_DEV_HELPER_WINDOW
+    if (IsDeveloperEditionActive())
+        return QString::fromStdString(GetDeveloperEditionVersionString());
+#endif
     return QString::fromStdString(FormatFullVersion());
 }
 
@@ -243,8 +249,8 @@ static void BlockTipChanged(ClientModel *clientmodel, bool initialSync, int heig
         clientmodel->cachedBestHeaderTime = blockTime;
     }
 
-    // During initial sync, block notifications, and header notifications from reindexing are both throttled.
-    if (!initialSync || (fHeader && !clientmodel->node().getReindex()) || now - nLastUpdateNotification > MODEL_UPDATE_DELAY) {
+    // During initial sync, throttle both header and block notifications.
+    if (!initialSync || now - nLastUpdateNotification > MODEL_UPDATE_DELAY) {
         //pass an async signal to the UI thread
         bool invoked = QMetaObject::invokeMethod(clientmodel, "numBlocksChanged", Qt::QueuedConnection,
                                   Q_ARG(int, height),

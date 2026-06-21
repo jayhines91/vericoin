@@ -126,6 +126,7 @@ namespace GUIUtil
 
     // Open debug.log
     void openDebugLogfile();
+    void openActivityLogfile();
 
     // Open the config file
     bool openBitcoinConf();
@@ -211,6 +212,9 @@ namespace GUIUtil
     QString formatNiceTimeOffset(qint64 secs);
 
     QString formatBytes(uint64_t bytes);
+
+    /** Keep a top-level widget fully visible on a screen (RDP / multi-monitor safe). */
+    void ensureWidgetOnScreen(QWidget* widget);
 
     qreal calculateIdealFontSize(int width, const QString& text, QFont font, qreal minPointSize = 4, qreal startPointSize = 14);
 

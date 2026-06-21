@@ -12,6 +12,7 @@ class BitcoinGUI;
 class ClientModel;
 class PlatformStyle;
 class SendCoinsRecipient;
+class WalletController;
 class WalletModel;
 class WalletView;
 
@@ -39,6 +40,7 @@ public:
     ~WalletFrame();
 
     void setClientModel(ClientModel *clientModel);
+    void setWalletController(WalletController* wallet_controller);
 
     bool addWallet(WalletModel *walletModel);
     void setCurrentWallet(WalletModel* wallet_model);
@@ -58,6 +60,7 @@ private:
     QStackedWidget *walletStack;
     BitcoinGUI *gui;
     ClientModel *clientModel;
+    WalletController* m_wallet_controller{nullptr};
     QMap<WalletModel*, WalletView*> mapWalletViews;
 
     bool bOutOfSync;

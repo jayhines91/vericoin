@@ -4,6 +4,8 @@
 
 #include <ui_interface.h>
 
+#include <util/activitylog.h>
+
 #include <boost/signals2/last_value.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -54,11 +56,13 @@ void CClientUIInterface::BannedListChanged() { return g_ui_signals.BannedListCha
 
 bool InitError(const std::string& str)
 {
+    LogActivityEx(ActivityLevel::Error, __FILE__, __LINE__, __func__, "InitError: %s", str.c_str());
     uiInterface.ThreadSafeMessageBox(str, "", CClientUIInterface::MSG_ERROR);
     return false;
 }
 
 void InitWarning(const std::string& str)
 {
+    LogActivityEx(ActivityLevel::Warning, __FILE__, __LINE__, __func__, "InitWarning: %s", str.c_str());
     uiInterface.ThreadSafeMessageBox(str, "", CClientUIInterface::MSG_WARNING);
 }

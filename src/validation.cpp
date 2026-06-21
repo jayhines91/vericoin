@@ -20,6 +20,7 @@
 #include <index/txindex.h>
 #include <logging.h>
 #include <logging/timer.h>
+#include <util/devtrace.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <pos.h>
@@ -41,10 +42,13 @@
 #include <util/moneystr.h>
 #include <util/strencodings.h>
 #include <util/system.h>
+#include <util/time.h>
 #include <util/translation.h>
 #include <validationinterface.h>
 #include <warnings.h>
 
+#include <atomic>
+#include <cinttypes>
 #include <string>
 
 #include <boost/algorithm/string/replace.hpp>
@@ -53,6 +57,19 @@
 #if defined(NDEBUG)
 # error "Vericonomy cannot be compiled without assertions."
 #endif
+
+static std::atomic<bool> g_chain_sync_paused_for_bootstrap{false};
+
+bool IsChainSyncPausedForBootstrap()
+{
+    return g_chain_sync_paused_for_bootstrap.load();
+}
+
+void SetChainSyncPausedForBootstrap(bool pause)
+{
+    g_chain_sync_paused_for_bootstrap.store(pause);
+    LogPrintf("bootstrap: chain sync %s for bootstrap download\n", pause ? "paused" : "resumed");
+}
 
 #define MICRO 0.000001
 #define MILLI 0.001
@@ -1217,10 +1234,26 @@ void static InvalidChainFound(CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(c
     CheckForkWarningConditions();
 }
 
+bool IsRecoverableCoinstakeFailureDuringIBD(const BlockValidationState& state)
+{
+    if (!::ChainstateActive().IsInitialBlockDownload()) {
+        return false;
+    }
+    const std::string& reason = state.GetRejectReason();
+    return reason == "bad-txns-coinstake-too-large" ||
+           reason == "unable to get coin age for coinstake";
+}
+
 // Same as InvalidChainFound, above, except not called directly from InvalidateBlock,
 // which does its own setBlockIndexCandidates manageent.
 void CChainState::InvalidBlockFound(CBlockIndex *pindex, const BlockValidationState &state) {
     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
+        if (IsRecoverableCoinstakeFailureDuringIBD(state)) {
+            LogPrintf("WARNING: %s: recoverable coinstake validation failure during IBD at height=%d hash=%s (%s); not marking block permanently invalid\n",
+                      __func__, pindex->nHeight, pindex->GetBlockHash().ToString(), state.GetRejectReason());
+            InvalidChainFound(pindex);
+            return;
+        }
         pindex->nStatus |= BLOCK_FAILED_VALID;
         m_blockman.m_failed_blocks.insert(pindex);
         setDirtyBlockIndex.insert(pindex);
@@ -1654,6 +1687,9 @@ static int64_t nBlocksTotal = 0;
 // These checks can only be done when all previous block have been added.
 bool VericoinContextualBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex, bool fJustCheck)
 {
+    LogConsensus("%s: height=%d hash=%s pos=%s fJustCheck=%s",
+        __func__, pindex->nHeight, block.GetHash().ToString(),
+        block.IsProofOfStake() ? "yes" : "no", fJustCheck ? "yes" : "no");
     // Verium
     const CChainParams& chainparams = Params();
     if( !chainparams.IsVericoin() )
@@ -1662,6 +1698,8 @@ bool VericoinContextualBlockChecks(const CBlock& block, BlockValidationState& st
     uint256 hashProofOfStake = uint256();
     // ppcoin: verify hash target and signature of coinstake tx
     if (block.IsProofOfStake() && !CheckProofOfStake(state, pindex->pprev, block.vtx[1], block.nBits, hashProofOfStake)) {
+        LogConsensus("WARNING: %s: check proof-of-stake failed for block %s",
+            __func__, block.GetHash().ToString());
         LogPrintf("WARNING: %s: check proof-of-stake failed for block %s\n", __func__, block.GetHash().ToString());
         return false; // do not error here as we expect this during initial block download
     }
@@ -1835,7 +1873,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     uint64_t nCoinAge;
     if( block.IsProofOfStake())
     {
-        if (!GetCoinAge(*(block.vtx[1].get()), view, nCoinAge, pindex->pprev))
+        if (!GetCoinAge(*(block.vtx[1].get()), view, nCoinAge, pindex->pprev, /*fStrictValidation=*/true))
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "unable to get coin age for coinstake");
     }
 
@@ -1955,8 +1993,12 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
 
     if( block.IsProofOfStake())
     {
-        if ( nStakeReward > GetProofOfStakeReward(nCoinAge, nFees, pindex->pprev, chainparams.GetConsensus() ))
+        const int64_t maxStakeReward = GetProofOfStakeReward(nCoinAge, nFees, pindex->pprev, chainparams.GetConsensus());
+        if (nStakeReward > maxStakeReward) {
+            LogPrintf("ConnectBlock(): coinstake reward check failed at height=%d hash=%s nCoinAge=%" PRIu64 " nStakeReward=%" PRId64 " maxReward=%" PRId64 "\n",
+                      pindex->nHeight, pindex->GetBlockHash().ToString(), nCoinAge, nStakeReward, maxStakeReward);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-txns-coinstake-too-large");
+        }
     }
 
     if (!control.Wait()) {
@@ -2310,8 +2352,26 @@ bool CChainState::ConnectTip(BlockValidationState& state, const CChainParams& ch
     int64_t nTime3;
     LogPrint(BCLog::BENCH, "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * MILLI, nTimeReadFromDisk * MICRO);
     {
-        CCoinsViewCache view(&CoinsTip());
-        bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, chainparams);
+        const auto connect_with_view = [&](BlockValidationState& connect_state) -> bool {
+            CCoinsViewCache view(&CoinsTip());
+            const bool ok = ConnectBlock(blockConnecting, connect_state, pindexNew, view, chainparams);
+            if (ok) {
+                assert(view.Flush());
+            }
+            return ok;
+        };
+
+        bool rv = connect_with_view(state);
+        if (!rv && state.IsInvalid() && IsRecoverableCoinstakeFailureDuringIBD(state)) {
+            LogPrintf("WARNING: %s: retrying %s after cache flush (recoverable coinstake failure during IBD)\n",
+                      __func__, pindexNew->GetBlockHash().ToString());
+            BlockValidationState flush_state;
+            if (FlushStateToDisk(chainparams, flush_state, FlushStateMode::ALWAYS)) {
+                state = BlockValidationState();
+                rv = connect_with_view(state);
+            }
+        }
+
         GetMainSignals().BlockChecked(blockConnecting, state);
         if (!rv) {
             if (state.IsInvalid())
@@ -2321,8 +2381,6 @@ bool CChainState::ConnectTip(BlockValidationState& state, const CChainParams& ch
         nTime3 = GetTimeMicros(); nTimeConnectTotal += nTime3 - nTime2;
         assert(nBlocksTotal > 0);
         LogPrint(BCLog::BENCH, "  - Connect total: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime3 - nTime2) * MILLI, nTimeConnectTotal * MICRO, nTimeConnectTotal * MILLI / nBlocksTotal);
-        bool flushed = view.Flush();
-        assert(flushed);
     }
     int64_t nTime4 = GetTimeMicros(); nTimeFlush += nTime4 - nTime3;
     LogPrint(BCLog::BENCH, "  - Flush: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime4 - nTime3) * MILLI, nTimeFlush * MICRO, nTimeFlush * MILLI / nBlocksTotal);
@@ -2558,6 +2616,13 @@ bool CChainState::ActivateBestChain(BlockValidationState &state, const CChainPar
     CBlockIndex *pindexNewTip = nullptr;
     int nStopAtHeight = gArgs.GetArg("-stopatheight", DEFAULT_STOPATHEIGHT);
     do {
+        while (IsChainSyncPausedForBootstrap()) {
+            if (ShutdownRequested()) {
+                return false;
+            }
+            UninterruptibleSleep(std::chrono::milliseconds{100});
+        }
+
         boost::this_thread::interruption_point();
 
         // Block until the validation queue drains. This should largely
@@ -3391,6 +3456,9 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
 // Exposed wrapper for AcceptBlockHeader
 bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
 {
+    if (IsChainSyncPausedForBootstrap()) {
+        return true;
+    }
     {
         LOCK(cs_main);
 
