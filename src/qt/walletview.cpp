@@ -18,17 +18,13 @@
 #include <qt/transactiontablemodel.h>
 #include <qt/transactionview.h>
 #include <qt/walletmodel.h>
-#include <qt/walletcontroller.h>
 #include <wallet/wallet.h> // for CRecipient
 
 #include <interfaces/node.h>
 #include <ui_interface.h>
 
-#include <QMessageBox>
-
 #include <QAction>
 #include <QActionGroup>
-#include <QEventLoop>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QProgressDialog>
@@ -235,34 +231,15 @@ void WalletView::updateEncryptionStatus()
     Q_EMIT encryptionStatusChanged();
 }
 
-void WalletView::setWalletController(WalletController* wallet_controller)
-{
-    m_wallet_controller = wallet_controller;
-}
-
 void WalletView::encryptWallet(bool status)
 {
     if(!walletModel)
         return;
-    if (!status) {
-        AskPassphraseDialog dlg(AskPassphraseDialog::Decrypt, this);
-        dlg.setModel(walletModel);
-        dlg.exec();
-        updateEncryptionStatus();
-        return;
-    }
-    if (!m_wallet_controller) {
-        QMessageBox::critical(this, tr("Wallet encryption failed"),
-            tr("Wallet controller is not available."));
-        return;
-    }
+    AskPassphraseDialog dlg(status ? AskPassphraseDialog::Encrypt : AskPassphraseDialog::Decrypt, this);
+    dlg.setModel(walletModel);
+    dlg.exec();
 
-    auto activity = new EncryptWalletActivity(m_wallet_controller, this);
-    connect(activity, &EncryptWalletActivity::encrypted, this, [this](WalletModel*) {
-        updateEncryptionStatus();
-    });
-    connect(activity, &EncryptWalletActivity::finished, activity, &QObject::deleteLater);
-    activity->encrypt(walletModel);
+    updateEncryptionStatus();
 }
 
 void WalletView::backupWallet()
@@ -316,25 +293,11 @@ bool WalletView::walletLogin()
                 }
             }
             if (walletModel->getEncryptionStatus() == WalletModel::Unencrypted){
-                if (!m_wallet_controller) {
-                    QMessageBox::critical(this, tr("Wallet encryption failed"),
-                        tr("Wallet controller is not available."));
-                    return loggedIn;
-                }
-                QEventLoop loop;
-                bool encrypt_ok = false;
-                auto activity = new EncryptWalletActivity(m_wallet_controller, this);
-                connect(activity, &EncryptWalletActivity::encrypted, this, [this, &encrypt_ok](WalletModel*) {
-                    encrypt_ok = true;
-                    updateEncryptionStatus();
-                });
-                connect(activity, &EncryptWalletActivity::finished, &loop, &QEventLoop::quit);
-                connect(activity, &EncryptWalletActivity::finished, activity, &QObject::deleteLater);
-                activity->encrypt(walletModel);
-                loop.exec();
-                if (encrypt_ok) {
-                    loggedIn = true;
-                }
+                AskPassphraseDialog dlg(true ? AskPassphraseDialog::Encrypt : AskPassphraseDialog::Decrypt, this);
+                dlg.setModel(walletModel);
+                dlg.exec();
+                updateEncryptionStatus();
+                loggedIn = true;
             }
         }
     }

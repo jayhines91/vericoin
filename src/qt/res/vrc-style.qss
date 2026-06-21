@@ -509,104 +509,8 @@ QWidget#bgWidget {
 QDialog#AskPassphraseDialog,
 QDialog#BootstrapDialog,
 QDialog#UpdateDialog {
-    border: 1px solid #d0d7de;
     border-radius: 5px;
     background-color: white;
-}
-
-QDialog#BootstrapDialog QLabel#idleTitle,
-QDialog#BootstrapDialog QLabel#progressTitle,
-QDialog#BootstrapDialog QLabel#interruptedTitle {
-    color: #243746;
-    font: 13pt "Lato";
-    font-weight: bold;
-}
-
-QDialog#BootstrapDialog QLabel#idleBody,
-QDialog#BootstrapDialog QLabel#progressSubtitle,
-QDialog#BootstrapDialog QLabel#interruptedBody,
-QDialog#BootstrapDialog QLabel#interruptedTip,
-QDialog#BootstrapDialog QLabel#sizeLabel {
-    color: #6b7785;
-    font: 10pt "Lato";
-}
-
-QDialog#BootstrapDialog QLabel#percentLabel {
-    color: #243746;
-    font: 18pt "Lato";
-    font-weight: bold;
-}
-
-QDialog#BootstrapDialog QLabel#networkPausedBadge {
-    color: #418bca;
-    background-color: #eef5fb;
-    border: 1px solid #c8ddf0;
-    border-radius: 3px;
-    padding: 4px 8px;
-    font: 9pt "Lato";
-    font-weight: bold;
-}
-
-QDialog#BootstrapDialog QLabel[bootstrapStep="active"] {
-    color: #418bca;
-    font-weight: bold;
-}
-
-QDialog#BootstrapDialog QLabel[bootstrapStep="done"] {
-    color: #46505A;
-}
-
-QDialog#BootstrapDialog QLabel[bootstrapStep="pending"] {
-    color: #9aa5b1;
-}
-
-QDialog#BootstrapDialog QLabel#stepSep1,
-QDialog#BootstrapDialog QLabel#stepSep2 {
-    color: #c5ced6;
-}
-
-QDialog#BootstrapDialog QFrame#interruptedDetailFrame {
-    background-color: #fff5f5;
-    border: 1px solid #f0c8c8;
-    border-radius: 4px;
-}
-
-QDialog#BootstrapDialog QLabel#interruptedUrlLabel {
-    color: #46505A;
-    font-family: "Consolas", "Courier New", monospace;
-    font-size: 9pt;
-}
-
-QDialog#BootstrapDialog QProgressBar {
-    border: 1px solid #d0d7de;
-    border-radius: 4px;
-    background-color: #eef2f6;
-    min-height: 14px;
-    max-height: 14px;
-    text-align: center;
-}
-
-QDialog#BootstrapDialog QProgressBar::chunk {
-    background-color: #418bca;
-    border-radius: 3px;
-}
-
-QDialog#BootstrapDialog QProgressBar#interruptedProgressBar::chunk {
-    background-color: #e8a045;
-}
-
-QDialog#BootstrapDialog QPushButton#showDetailsButton {
-    color: #418bca;
-    background: transparent;
-    border: none;
-    font: 9pt "Lato";
-    text-align: left;
-    padding-left: 0;
-}
-
-QDialog#BootstrapDialog QPushButton#showDetailsButton:hover {
-    color: #2d6a9f;
-    background: transparent;
 }
 
 QDialog#AskPassphraseDialog QLabel,
@@ -630,23 +534,6 @@ QDialog#UpdateDialog QPushButton {
     font-weight: bold;
 }
 
-QDialog#BootstrapDialog QPushButton#closeButton,
-QDialog#BootstrapDialog QPushButton#cancelDownloadButton,
-QDialog#BootstrapDialog QPushButton#interruptedCancelButton,
-QDialog#BootstrapDialog QPushButton#interruptedDetailsButton {
-    background-color: white;
-    color: #46505A;
-    border: 1px solid #c5ced6;
-}
-
-QDialog#BootstrapDialog QPushButton#closeButton:hover,
-QDialog#BootstrapDialog QPushButton#cancelDownloadButton:hover,
-QDialog#BootstrapDialog QPushButton#interruptedCancelButton:hover,
-QDialog#BootstrapDialog QPushButton#interruptedDetailsButton:hover {
-    background-color: #f5f7fa;
-    color: #46505A;
-}
-
 QDialog#AskPassphraseDialog QPushButton:hover,
 QDialog#BootstrapDialog QPushButton:hover,
 QDialog#UpdateDialog QPushButton:hover {
@@ -654,11 +541,13 @@ QDialog#UpdateDialog QPushButton:hover {
 }
 
 QDialog#AskPassphraseDialog QPushButton#closeButton,
+QDialog#BootstrapDialog QPushButton#closeButton,
 QDialog#UpdateDialog QPushButton#closeButton {
     background-color: #e93a5d;
 }
 
 QDialog#AskPassphraseDialog QPushButton#closeButton:hover,
+QDialog#BootstrapDialog QPushButton#closeButton:hover,
 QDialog#UpdateDialog QPushButton#closeButton:hover {
     background-color: #e61942;
 }

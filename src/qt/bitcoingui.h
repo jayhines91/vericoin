@@ -105,7 +105,6 @@ public:
 
 protected:
     void changeEvent(QEvent *e);
-    void resizeEvent(QResizeEvent *event);
     void showEvent(QShowEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
@@ -205,9 +204,6 @@ private:
 
     /** Check for new update */
     void checkForUpdate();
-
-    /** Deferred startup checks (update/bootstrap) after the UI is shown. */
-    void deferredStartupChecks();
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();
@@ -354,8 +350,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event);
 
 private:
-    QPoint m_dragPosition;
-    bool m_dragging{false};
+    QPointF initPosition;
 
 };
 

@@ -9503,7 +9503,7 @@ int64_t GetStakeTimeFactoredWeight(int64_t timeWeight, int64_t bnCoinDayWeight, 
 /** Get reward amount for a solved work **/
 int64_t GetProofOfStakeReward(int64_t nCoinAge, int64_t nFees, CBlockIndex* pindex, const Consensus::Params& params);
 
-bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache &view, uint64_t& nCoinAge, CBlockIndex* pindexPre, bool fStrictValidation = false);
+bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache &view, uint64_t& nCoinAge, CBlockIndex* pindexPre);
 
 static const double PI = 3.1415926535;
 // MODIFIER_INTERVAL_RATIO:

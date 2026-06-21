@@ -13,8 +13,6 @@
 
 #include <clientversion.h>
 #include <init.h>
-#include <util/devhelperconfig.h>
-#include <util/devedition.h>
 #include <util/system.h>
 #include <util/strencodings.h>
 
@@ -35,16 +33,7 @@ HelpMessageDialog::HelpMessageDialog(interfaces::Node& node, QWidget *parent, bo
 {
     ui->setupUi(this);
 
-    QString version = QString{GUIUtil::GetCoinName()} + " " + tr("version") + " ";
-#if ENABLE_DEV_HELPER_WINDOW
-    if (IsDeveloperEditionActive())
-        version += QString::fromStdString(GetDeveloperEditionVersionString());
-    else
-#endif
-        version += QString::fromStdString(FormatFullVersion());
-#if ENABLE_BETA_BUILD
-    version += QStringLiteral(" Beta");
-#endif
+    QString version = QString{GUIUtil::GetCoinName()} + " " + tr("version") + " " + QString::fromStdString(FormatFullVersion());
 
     if (about)
     {
@@ -152,23 +141,15 @@ ShutdownWindow::ShutdownWindow(QWidget *parent, Qt::WindowFlags f):
     layout->addWidget(new QLabel(
         tr("%1 is shutting down...").arg(GUIUtil::GetCoinName()) + "<br /><br />" +
         tr("Do not shut down the computer until this window disappears.")));
-    m_detailLabel = new QLabel();
-    m_detailLabel->setWordWrap(true);
-    m_detailLabel->hide();
-    layout->addWidget(m_detailLabel);
     setLayout(layout);
 }
 
-QWidget* ShutdownWindow::showShutdownWindow(QMainWindow* window, const QString& detail)
+QWidget* ShutdownWindow::showShutdownWindow(QMainWindow* window)
 {
     assert(window != nullptr);
 
     // Show a simple window indicating shutdown status
-    ShutdownWindow *shutdownWindow = new ShutdownWindow();
-    if (!detail.isEmpty()) {
-        shutdownWindow->m_detailLabel->setText(detail);
-        shutdownWindow->m_detailLabel->show();
-    }
+    QWidget *shutdownWindow = new ShutdownWindow();
     shutdownWindow->setWindowTitle(window->windowTitle());
 
     // Center shutdown window at where main window was

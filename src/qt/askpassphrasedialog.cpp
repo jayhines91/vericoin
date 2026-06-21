@@ -142,8 +142,24 @@ void AskPassphraseDialog::accept()
                                          tr("Your wallet is about to be encrypted. ") + encryption_reminder +
                                          "</b></qt>");
                 } else {
-                    QMessageBox::critical(this, tr("Wallet encryption failed"),
-                                         tr("Wallet encryption is not available from this dialog."));
+                    assert(model != nullptr);
+                    if(model->setWalletEncrypted(true, newpass1))
+                    {
+                        QMessageBox::warning(this, tr("Wallet encrypted"),
+                                             "<qt>" +
+                                             tr("Your wallet is now encrypted. ") + encryption_reminder +
+                                             "<br><br><b>" +
+                                             tr("IMPORTANT: Any previous backups you have made of your wallet file "
+                                             "should be replaced with the newly generated, encrypted wallet file. "
+                                             "For security reasons, previous backups of the unencrypted wallet file "
+                                             "will become useless as soon as you start using the new, encrypted wallet.") +
+                                             "</b></qt>");
+                    }
+                    else
+                    {
+                        QMessageBox::critical(this, tr("Wallet encryption failed"),
+                                             tr("Wallet encryption failed due to an internal error. Your wallet was not encrypted."));
+                    }
                 }
                 QDialog::accept(); // Success
             }
@@ -184,16 +200,14 @@ void AskPassphraseDialog::accept()
     case ChangePass:
         if(newpass1 == newpass2)
         {
-            hide();
             if(model->changePassphrase(oldpass, newpass1))
             {
-                QMessageBox::information(window(), tr("Wallet encrypted"),
+                QMessageBox::information(this, tr("Wallet encrypted"),
                                      tr("Wallet passphrase was successfully changed."));
                 QDialog::accept(); // Success
             }
             else
             {
-                show();
                 QMessageBox::critical(this, tr("Wallet encryption failed"),
                                      tr("The passphrase entered for the wallet decryption was incorrect."));
             }

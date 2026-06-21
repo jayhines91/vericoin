@@ -38,9 +38,6 @@
 #include <chainparams.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
-#include <util/activitylog.h>
-#include <util/devhelperconfig.h>
-#include <util/devedition.h>
 #include <ui_interface.h>
 #include <util/system.h>
 
@@ -55,7 +52,6 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QProgressDialog>
-#include <QResizeEvent>
 #include <QScreen>
 #include <QSettings>
 #include <QShortcut>
@@ -64,7 +60,6 @@
 #include <QStyle>
 #include <QSystemTrayIcon>
 #include <QTimer>
-#include <QThread>
 #include <QToolBar>
 #include <QUrlQuery>
 #include <QVBoxLayout>
@@ -116,7 +111,6 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
         // Restore failed (perhaps missing setting), center the window
         move(QGuiApplication::primaryScreen()->availableGeometry().center() - frameGeometry().center());
     }
-    GUIUtil::ensureWidgetOnScreen(this);
 
 #ifdef ENABLE_WALLET
     enableWallet = WalletModel::isWalletEnabled();
@@ -759,8 +753,14 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel)
 
         updateProxyIcon();
 
-        // Defer network-heavy startup prompts so headers/IBD are not blocked on the UI thread.
-        QTimer::singleShot(500, this, &BitcoinGUI::deferredStartupChecks);
+        bool currentNetworkState = m_node.getNetworkActive();
+        m_node.setNetworkActive(false);
+
+        checkForUpdate();
+
+        checkForBootStrap();
+
+        m_node.setNetworkActive(currentNetworkState);
 
 #ifdef ENABLE_WALLET
         if(walletFrame)
@@ -813,10 +813,6 @@ void BitcoinGUI::setWalletController(WalletController* wallet_controller)
 
     connect(wallet_controller, &WalletController::walletAdded, this, &BitcoinGUI::addWallet);
     connect(wallet_controller, &WalletController::walletRemoved, this, &BitcoinGUI::removeWallet);
-
-    if (walletFrame) {
-        walletFrame->setWalletController(wallet_controller);
-    }
 
     for (WalletModel* wallet_model : m_wallet_controller->getOpenWallets()) {
         addWallet(wallet_model);
@@ -1119,68 +1115,26 @@ void BitcoinGUI::checkForUpdate()
 
     if( needUpdate ) {
         auto updatedialog = new UpdateDialog(this);
-        updatedialog->setAttribute(Qt::WA_DeleteOnClose);
-        updatedialog->show();
+        updatedialog->exec();
     }
-}
-
-void BitcoinGUI::deferredStartupChecks()
-{
-    if (!clientModel)
-        return;
-
-#if ENABLE_DEV_HELPER_WINDOW
-    if (IsDeveloperEditionActive() && !IsDevStartupPromptComplete())
-        return;
-#endif
-
-    checkForBootStrap();
-
-    QThread* update_thread = new QThread;
-    QObject* update_worker = new QObject;
-    update_worker->moveToThread(update_thread);
-    connect(update_thread, &QThread::started, update_worker, [this, update_thread]() {
-        bool needUpdate = false;
-        try {
-            needUpdate = needClientUpdate();
-        } catch (...) {
-            update_thread->quit();
-            return;
-        }
-        if (needUpdate) {
-            QTimer::singleShot(0, this, [this]() {
-                if (!clientModel)
-                    return;
-                auto* updatedialog = new UpdateDialog(this);
-                updatedialog->setAttribute(Qt::WA_DeleteOnClose);
-                updatedialog->show();
-            });
-        }
-        update_thread->quit();
-    });
-    connect(update_thread, &QThread::finished, update_worker, &QObject::deleteLater);
-    connect(update_thread, &QThread::finished, update_thread, &QObject::deleteLater);
-    update_thread->start();
 }
 
 void BitcoinGUI::checkForBootStrap()
 {
-#if ENABLE_DEV_HELPER_WINDOW
-    if (IsDeveloperEditionActive() && !IsDevStartupPromptComplete())
-        return;
-#endif
-
     // show bootstrap if older than a week
     QDateTime blockDate = QDateTime::fromTime_t(m_node.getLastBlockTime());
     QDateTime currentDate = QDateTime::currentDateTime();
 
     if( blockDate.secsTo(currentDate) > 60 * 60 * 24 * 60 ) {
 
-        LogActivityEx(ActivityLevel::Info, __FILE__, __LINE__, __func__,
-            "Offering bootstrap download (chain more than 60 days behind)");
+        QMessageBox bootstrapSuggestion;
+        bootstrapSuggestion.setWindowTitle(tr("Old chain detected"));
+        bootstrapSuggestion.setText(tr("Your chain seems to be way behind by at least 60 days.\n\nYou can download the blockchain from the Vericonomy servers to speed up the sync !"));
+        bootstrapSuggestion.setIcon(QMessageBox::Information);
+        bootstrapSuggestion.exec();
 
-        BootstrapDialog bootstrapDialog(this);
-        bootstrapDialog.exec();
+        auto bootstrapDialog = new BootstrapDialog(this);
+        bootstrapDialog->exec();
     }
 }
 
@@ -1339,9 +1293,7 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVer
         if(walletFrame)
         {
             walletFrame->showOutOfSyncWarning(true);
-            if (loggedIn && modalOverlay && !modalOverlay->isLayerVisible()) {
-                modalOverlay->showHide(false, false);
-            }
+            if (loggedIn){modalOverlay->showHide();}
         }
 #endif // ENABLE_WALLET
 
@@ -1419,12 +1371,6 @@ void BitcoinGUI::message(const QString& title, QString message, unsigned int sty
     } else {
         notificator->notify(static_cast<Notificator::Class>(nNotifyIcon), strTitle, message);
     }
-}
-
-void BitcoinGUI::resizeEvent(QResizeEvent *event)
-{
-    QMainWindow::resizeEvent(event);
-    GUIUtil::ensureWidgetOnScreen(this);
 }
 
 void BitcoinGUI::changeEvent(QEvent *e)
@@ -1600,18 +1546,7 @@ void BitcoinGUI::updateProxyIcon()
 
 void BitcoinGUI::updateWindowTitle()
 {
-    QString window_title;
-#if ENABLE_DEV_HELPER_WINDOW
-    if (IsDeveloperEditionActive()) {
-        window_title = QString::fromStdString(GetDeveloperEditionTitle());
-    } else
-#endif
-    {
-        window_title = GUIUtil::GetCoinName();
-#if ENABLE_BETA_BUILD
-        window_title += QStringLiteral(" Beta");
-#endif
-    }
+    QString window_title = GUIUtil::GetCoinName();;
 #ifdef ENABLE_WALLET
     if (walletFrame) {
         WalletModel* const wallet_model = walletFrame->currentWalletModel();
@@ -1656,8 +1591,6 @@ void BitcoinGUI::detectShutdown()
 void BitcoinGUI::showProgress(const QString &title, int nProgress)
 {
     if (nProgress == 0) {
-        LogActivityEx(ActivityLevel::Progress, __FILE__, __LINE__, __func__,
-            "Modal progress started: %s", title.toStdString().c_str());
         progressDialog = new QProgressDialog(title, QString(), 0, 100);
         GUIUtil::PolishProgressDialog(progressDialog);
         progressDialog->setWindowModality(Qt::ApplicationModal);
@@ -1665,16 +1598,12 @@ void BitcoinGUI::showProgress(const QString &title, int nProgress)
         progressDialog->setAutoClose(false);
         progressDialog->setValue(0);
     } else if (nProgress == 100) {
-        LogActivityEx(ActivityLevel::Progress, __FILE__, __LINE__, __func__,
-            "Modal progress finished: %s", title.toStdString().c_str());
         if (progressDialog) {
             progressDialog->close();
             progressDialog->deleteLater();
             progressDialog = nullptr;
         }
     } else if (progressDialog) {
-        LogActivityEx(ActivityLevel::Progress, __FILE__, __LINE__, __func__,
-            "Modal progress %s: %d%%", title.toStdString().c_str(), nProgress);
         progressDialog->setValue(nProgress);
     }
 }
@@ -1743,19 +1672,13 @@ MoveWindowControl::MoveWindowControl(QWidget *parent) :
 
 void MoveWindowControl::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton) {
-        m_dragging = true;
-        m_dragPosition = event->globalPos() - window()->frameGeometry().topLeft();
-        event->accept();
-    }
+    initPosition = event->windowPos();
 }
 
 void MoveWindowControl::mouseMoveEvent(QMouseEvent *event)
 {
-    if (m_dragging && (event->buttons() & Qt::LeftButton)) {
-        window()->move(event->globalPos() - m_dragPosition);
-        event->accept();
-    }
+
+    window()->move(event->globalX() - initPosition.x(), event->globalY() - initPosition.y());
 }
 
 UnitDisplayStatusBarControl::UnitDisplayStatusBarControl(const PlatformStyle *platformStyle) :

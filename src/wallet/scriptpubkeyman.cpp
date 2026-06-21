@@ -292,31 +292,27 @@ bool LegacyScriptPubKeyMan::GetReservedDestination(const OutputType type, bool i
 
 void LegacyScriptPubKeyMan::MarkUnusedAddresses(const CScript& script)
 {
-    bool needs_topup = false;
-    {
-        LOCK(cs_KeyStore);
-        // extract addresses and check if they match with an unused keypool key
-        for (const auto& keyid : GetAffectedKeys(script, *this)) {
-            std::map<CKeyID, int64_t>::const_iterator mi = m_pool_key_to_index.find(keyid);
-            if (mi != m_pool_key_to_index.end()) {
-                WalletLogPrintf("%s: Detected a used keypool key, mark all keypool key up to this key as used\n", __func__);
-                MarkReserveKeysAsUsed(mi->second);
-                needs_topup = true;
+    LOCK(cs_KeyStore);
+    // extract addresses and check if they match with an unused keypool key
+    for (const auto& keyid : GetAffectedKeys(script, *this)) {
+        std::map<CKeyID, int64_t>::const_iterator mi = m_pool_key_to_index.find(keyid);
+        if (mi != m_pool_key_to_index.end()) {
+            WalletLogPrintf("%s: Detected a used keypool key, mark all keypool key up to this key as used\n", __func__);
+            MarkReserveKeysAsUsed(mi->second);
+
+            if (!TopUp()) {
+                WalletLogPrintf("%s: Topping up keypool failed (locked wallet)\n", __func__);
             }
         }
-    }
-    if (needs_topup && !TopUp()) {
-        WalletLogPrintf("%s: Topping up keypool failed (locked wallet)\n", __func__);
     }
 }
 
 void LegacyScriptPubKeyMan::UpgradeKeyMetadata()
 {
+    LOCK(cs_KeyStore);
     if (m_storage.IsLocked() || m_storage.IsWalletFlagSet(WALLET_FLAG_KEY_ORIGIN_METADATA)) {
         return;
     }
-
-    LOCK(cs_KeyStore);
 
     std::unique_ptr<WalletBatch> batch = MakeUnique<WalletBatch>(m_storage.GetDatabase());
     for (auto& meta_pair : mapKeyMetadata) {
@@ -383,30 +379,28 @@ bool LegacyScriptPubKeyMan::CanGetAddresses(bool internal) const
 
 bool LegacyScriptPubKeyMan::Upgrade(int prev_version, std::string& error)
 {
+    LOCK(cs_KeyStore);
     error = "";
     bool hd_upgrade = false;
     bool split_upgrade = false;
-    {
-        LOCK(cs_KeyStore);
-        if (m_storage.CanSupportFeature(FEATURE_HD) && !IsHDEnabled()) {
-            WalletLogPrintf("Upgrading wallet to HD\n");
-            m_storage.SetMinVersion(FEATURE_HD);
+    if (m_storage.CanSupportFeature(FEATURE_HD) && !IsHDEnabled()) {
+        WalletLogPrintf("Upgrading wallet to HD\n");
+        m_storage.SetMinVersion(FEATURE_HD);
 
-            // generate a new master key
-            CPubKey masterPubKey = GenerateNewSeed();
-            SetHDSeed(masterPubKey);
-            hd_upgrade = true;
-        }
-        // Upgrade to HD chain split if necessary
-        if (m_storage.CanSupportFeature(FEATURE_HD_SPLIT) && CHDChain::VERSION_HD_CHAIN_SPLIT) {
-            WalletLogPrintf("Upgrading wallet to use HD chain split\n");
-            m_storage.SetMinVersion(FEATURE_PRE_SPLIT_KEYPOOL);
-            split_upgrade = FEATURE_HD_SPLIT > prev_version;
-        }
-        // Mark all keys currently in the keypool as pre-split
-        if (split_upgrade) {
-            MarkPreSplitKeys();
-        }
+        // generate a new master key
+        CPubKey masterPubKey = GenerateNewSeed();
+        SetHDSeed(masterPubKey);
+        hd_upgrade = true;
+    }
+    // Upgrade to HD chain split if necessary
+    if (m_storage.CanSupportFeature(FEATURE_HD_SPLIT) && CHDChain::VERSION_HD_CHAIN_SPLIT) {
+        WalletLogPrintf("Upgrading wallet to use HD chain split\n");
+        m_storage.SetMinVersion(FEATURE_PRE_SPLIT_KEYPOOL);
+        split_upgrade = FEATURE_HD_SPLIT > prev_version;
+    }
+    // Mark all keys currently in the keypool as pre-split
+    if (split_upgrade) {
+        MarkPreSplitKeys();
     }
     // Regenerate the keypool if upgraded to HD
     if (hd_upgrade) {
@@ -694,13 +688,13 @@ void LegacyScriptPubKeyMan::LoadScriptMetadata(const CScriptID& script_id, const
 
 bool LegacyScriptPubKeyMan::AddKeyPubKeyInner(const CKey& key, const CPubKey &pubkey)
 {
-    if (m_storage.HasEncryptionKeys() && m_storage.IsLocked()) {
-        return false;
-    }
-
     LOCK(cs_KeyStore);
     if (!m_storage.HasEncryptionKeys()) {
         return FillableSigningProvider::AddKeyPubKey(key, pubkey);
+    }
+
+    if (m_storage.IsLocked()) {
+        return false;
     }
 
     std::vector<unsigned char> vchCryptedSecret;
@@ -1124,11 +1118,12 @@ bool LegacyScriptPubKeyMan::NewKeyPool()
         set_pre_split_keypool.clear();
 
         m_pool_key_to_index.clear();
+
+        if (!TopUp()) {
+            return false;
+        }
+        WalletLogPrintf("LegacyScriptPubKeyMan::NewKeyPool rewrote keypool\n");
     }
-    if (!TopUp()) {
-        return false;
-    }
-    WalletLogPrintf("LegacyScriptPubKeyMan::NewKeyPool rewrote keypool\n");
     return true;
 }
 
@@ -1137,11 +1132,10 @@ bool LegacyScriptPubKeyMan::TopUp(unsigned int kpSize)
     if (!CanGenerateKeys()) {
         return false;
     }
-    if (m_storage.IsLocked()) {
-        return false;
-    }
     {
         LOCK(cs_KeyStore);
+
+        if (m_storage.IsLocked()) return false;
 
         // Top up key pool
         unsigned int nTargetSize;
@@ -1233,15 +1227,13 @@ bool LegacyScriptPubKeyMan::GetKeyFromPool(CPubKey& result, const OutputType typ
     if (!CanGetAddresses(internal)) {
         return false;
     }
-    if (m_storage.IsLocked()) {
-        return false;
-    }
 
     CKeyPool keypool;
     {
         LOCK(cs_KeyStore);
         int64_t nIndex;
         if (!ReserveKeyFromKeyPool(nIndex, keypool, internal) && !m_storage.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
+            if (m_storage.IsLocked()) return false;
             WalletBatch batch(m_storage.GetDatabase());
             result = GenerateNewKey(batch, internal);
             return true;

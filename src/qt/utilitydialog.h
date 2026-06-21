@@ -10,7 +10,6 @@
 
 QT_BEGIN_NAMESPACE
 class QMainWindow;
-class QLabel;
 QT_END_NAMESPACE
 
 namespace interfaces {
@@ -49,13 +48,10 @@ class ShutdownWindow : public QWidget
 
 public:
     explicit ShutdownWindow(QWidget *parent=nullptr, Qt::WindowFlags f=Qt::Widget);
-    static QWidget* showShutdownWindow(QMainWindow* window, const QString& detail = QString());
+    static QWidget* showShutdownWindow(QMainWindow* window);
 
 protected:
     void closeEvent(QCloseEvent *event);
-
-private:
-    QLabel* m_detailLabel = nullptr;
 };
 
 #endif // BITCOIN_QT_UTILITYDIALOG_H

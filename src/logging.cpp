@@ -9,10 +9,6 @@
 
 #include <mutex>
 
-namespace BCLog {
-thread_local bool g_logger_in_print_callback{false};
-}
-
 const char * const DEFAULT_DEBUGLOGFILE = "debug.log";
 
 BCLog::Logger& LogInstance()
@@ -72,9 +68,7 @@ bool BCLog::Logger::StartLogging()
         if (m_print_to_file) FileWriteStr(s, m_fileout);
         if (m_print_to_console) fwrite(s.data(), 1, s.size(), stdout);
         for (const auto& cb : m_print_callbacks) {
-            BCLog::g_logger_in_print_callback = true;
             cb(s);
-            BCLog::g_logger_in_print_callback = false;
         }
 
         m_msgs_before_open.pop_front();
@@ -167,7 +161,6 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::QT, "qt"},
     {BCLog::LEVELDB, "leveldb"},
     {BCLog::VALIDATION, "validation"},
-    {BCLog::CONSENSUS, "consensus"},
     {BCLog::ALL, "1"},
     {BCLog::ALL, "all"},
 };
@@ -289,9 +282,7 @@ void BCLog::Logger::LogPrintStr(const std::string& str)
         fflush(stdout);
     }
     for (const auto& cb : m_print_callbacks) {
-        BCLog::g_logger_in_print_callback = true;
         cb(str_prefixed);
-        BCLog::g_logger_in_print_callback = false;
     }
     if (m_print_to_file) {
         assert(m_fileout != nullptr);

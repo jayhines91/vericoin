@@ -102,7 +102,7 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
         qint64 timeDelta = 0;
         qint64 remainingMSecs = 0;
         double remainingProgress = 1.0 - nVerificationProgress;
-        for (int i = 1; i < blockProcessTime.size() && i < 64; i++) {
+        for (int i = 1; i < blockProcessTime.size(); i++) {
             QPair<qint64, double> sample = blockProcessTime[i];
 
             // take first sample after 500 seconds or last available one

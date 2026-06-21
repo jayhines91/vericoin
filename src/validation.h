@@ -259,10 +259,6 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
  */
 bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex) LOCKS_EXCLUDED(cs_main);
 
-/** While bootstrap download runs, pause header/block sync work. */
-bool IsChainSyncPausedForBootstrap();
-void SetChainSyncPausedForBootstrap(bool pause);
-
 /** Open a block file (blk?????.dat) */
 FILE* OpenBlockFile(const FlatFilePos &pos, bool fReadOnly = false);
 /** Translation to a filesystem path */
@@ -767,9 +763,6 @@ private:
 unsigned int GetNextTargetOrWorkRequired(const CBlockIndex* pindexLast, bool fProofOfStake, const Consensus::Params& consensusParams);
 bool IsProofOfStake(const Consensus::Params& consensusParams, int nHeight);
 bool VericoinContextualBlockChecks(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex, bool fJustCheck);
-
-/** Coinstake reward failures during IBD can be transient when UTXO cache is incomplete. */
-bool IsRecoverableCoinstakeFailureDuringIBD(const BlockValidationState& state);
 
 /** Mark a block as precious and reorganize.
  *

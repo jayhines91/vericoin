@@ -35,7 +35,6 @@
 #include <sched.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
 #else
 
@@ -67,7 +66,6 @@
 #endif
 
 #include <boost/algorithm/string.hpp>
-#include <limits>
 #include <thread>
 #include <typeinfo>
 #include <univalue.h>
@@ -1180,27 +1178,6 @@ bool SetupNetworking()
 int GetNumCores()
 {
     return std::thread::hardware_concurrency();
-}
-
-Optional<size_t> GetTotalRAM()
-{
-    auto clamp = [](uint64_t bytes) {
-        return static_cast<size_t>(std::min(bytes, uint64_t{std::numeric_limits<size_t>::max()}));
-    };
-#ifdef WIN32
-    MEMORYSTATUSEX mem{};
-    mem.dwLength = sizeof(mem);
-    if (GlobalMemoryStatusEx(&mem)) {
-        return clamp(mem.ullTotalPhys);
-    }
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__linux__)
-    const long pages = sysconf(_SC_PHYS_PAGES);
-    const long page_size = sysconf(_SC_PAGESIZE);
-    if (pages > 0 && page_size > 0) {
-        return clamp(static_cast<uint64_t>(pages) * static_cast<uint64_t>(page_size));
-    }
-#endif
-    return nullopt;
 }
 
 std::string CopyrightHolders(const std::string& strPrefix)
