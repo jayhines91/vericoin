@@ -20,6 +20,7 @@
 #include <rpc/client.h>
 #include <util/strencodings.h>
 #include <util/system.h>
+#include <util/activitylog.h>
 
 #include <univalue.h>
 
@@ -31,12 +32,16 @@
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QScreen>
 #include <QSettings>
+#include <QTextCursor>
 #include <QTime>
 #include <QTimer>
 #include <QStringList>
+#include <QVBoxLayout>
 
 // TODO: add a scrollback limit, as there is currently none
 // TODO: make it possible to filter out categories (esp debug messages when implemented)
@@ -498,6 +503,45 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
 
     consoleFontSize = settings.value(fontSizeSettingsKey, QFontInfo(QFont()).pointSize()).toInt();
     clear();
+
+    QWidget* activityTab = new QWidget();
+    QVBoxLayout* activityLayout = new QVBoxLayout(activityTab);
+    m_activityWidget = new QPlainTextEdit();
+    m_activityWidget->setReadOnly(true);
+    m_activityWidget->setMaximumBlockCount(5000);
+    activityLayout->addWidget(m_activityWidget);
+    m_openActivityLogButton = new QPushButton(tr("Open %1").arg(tr("Activity Log")));
+    m_openActivityLogButton->setToolTip(tr("Open the full activity log in your default editor."));
+    if (platformStyle->getImagesOnButtons()) {
+        m_openActivityLogButton->setIcon(platformStyle->SingleColorIcon(":/icons/export"));
+    }
+    connect(m_openActivityLogButton, &QPushButton::clicked, this, &RPCConsole::on_openActivityLogButton_clicked);
+    activityLayout->addWidget(m_openActivityLogButton);
+    ui->tabWidget->addTab(activityTab, tr("&Activity"));
+
+    const fs::path activity_path = GetActivityLogPath();
+    if (fs::exists(activity_path)) {
+        FILE* activity_file = fsbridge::fopen(activity_path, "r");
+        if (activity_file) {
+            fseek(activity_file, 0, SEEK_END);
+            const long file_size = ftell(activity_file);
+            const long tail_start = file_size > 128000 ? file_size - 128000 : 0;
+            fseek(activity_file, tail_start, SEEK_SET);
+            char buffer[4096];
+            size_t nread;
+            while ((nread = fread(buffer, 1, sizeof(buffer), activity_file)) > 0) {
+                m_activityWidget->moveCursor(QTextCursor::End);
+                m_activityWidget->insertPlainText(QString::fromUtf8(buffer, static_cast<int>(nread)));
+            }
+            fclose(activity_file);
+            m_activityWidget->moveCursor(QTextCursor::End);
+        }
+    }
+
+    m_activity_connection = ActivityLogSignals().connect([this](const std::string& line) {
+        QMetaObject::invokeMethod(this, "appendActivityLine", Qt::QueuedConnection,
+                                  Q_ARG(QString, QString::fromStdString(line)));
+    });
 }
 
 RPCConsole::~RPCConsole()
@@ -990,6 +1034,20 @@ void RPCConsole::on_openDebugLogfileButton_clicked()
     GUIUtil::openDebugLogfile();
 }
 
+void RPCConsole::on_openActivityLogButton_clicked()
+{
+    GUIUtil::openActivityLogfile();
+}
+
+void RPCConsole::appendActivityLine(const QString& line)
+{
+    if (!m_activityWidget)
+        return;
+    m_activityWidget->moveCursor(QTextCursor::End);
+    m_activityWidget->insertPlainText(line);
+    m_activityWidget->moveCursor(QTextCursor::End);
+}
+
 void RPCConsole::scrollToEnd()
 {
     QScrollBar *scrollbar = ui->messagesWidget->verticalScrollBar();
@@ -1280,6 +1338,7 @@ QKeySequence RPCConsole::tabShortcut(TabTypes tab_type) const
     case TabTypes::CONSOLE: return QKeySequence(Qt::CTRL + Qt::Key_T);
     case TabTypes::GRAPH: return QKeySequence(Qt::CTRL + Qt::Key_N);
     case TabTypes::PEERS: return QKeySequence(Qt::CTRL + Qt::Key_P);
+    case TabTypes::ACTIVITY: return QKeySequence(Qt::CTRL + Qt::Key_A);
     } // no default case, so the compiler can warn about missing cases
 
     assert(false);

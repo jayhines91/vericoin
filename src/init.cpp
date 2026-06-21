@@ -49,6 +49,9 @@
 #include <txmempool.h>
 #include <ui_interface.h>
 #include <util/asmap.h>
+#include <util/activitylog.h>
+#include <util/devedition.h>
+#include <util/devtrace.h>
 #include <util/moneystr.h>
 #include <util/string.h>
 #include <util/system.h>
@@ -175,23 +178,24 @@ void Interrupt(NodeContext& node)
 
 void Shutdown(NodeContext& node)
 {
+    DEV_TRACE("Shutdown: beginning");
     LogPrintf("%s: In progress...\n", __func__);
     static RecursiveMutex cs_Shutdown;
     TRY_LOCK(cs_Shutdown, lockShutdown);
-    if (!lockShutdown)
+    if (!lockShutdown) {
+        DEV_WARN("Shutdown: could not acquire shutdown lock (already shutting down?)");
         return;
+    }
 
-    /// Note: Shutdown() must be able to handle cases in which initialization failed part of the way,
-    /// for example if the data directory was found to be locked.
-    /// Be sure that anything that writes files or flushes caches only does this if the respective
-    /// module was initialized.
     util::ThreadRename("shutoff");
+    DEV_TRACE("Shutdown: stopping HTTP/RPC");
     mempool.AddTransactionsUpdated(1);
 
     StopHTTPRPC();
     StopREST();
     StopRPC();
     StopHTTPServer();
+    DEV_TRACE("Shutdown: flushing wallet clients");
     for (const auto& client : node.chain_clients) {
         client->flush();
     }
@@ -210,19 +214,20 @@ void Shutdown(NodeContext& node)
     //
     // Thus the implicit locking order requirement is: (1) cs_main, (2) g_cs_orphans, (3) cs_vNodes.
     if (node.connman) {
+        DEV_TRACE("Shutdown: stopping network threads");
         node.connman->StopThreads();
         LOCK2(::cs_main, ::g_cs_orphans);
         node.connman->StopNodes();
     }
 
     StopTorControl();
-
-    // Stopping verium
+    DEV_TRACE("Shutdown: stopping miners");
     GenerateVerium(false, nullptr, 0, node.connman.get(), node.mempool);
     GenerateVericoin(false, nullptr, node.connman.get(), node.mempool);
 
     // After everything has been shut down, but before things get flushed, stop the
     // CScheduler/checkqueue threadGroup
+    DEV_TRACE("Shutdown: stopping scheduler and script threads");
     if (node.scheduler) node.scheduler->stop();
     threadGroup.interrupt_all();
     threadGroup.join_all();
@@ -241,6 +246,7 @@ void Shutdown(NodeContext& node)
     //
     // g_chainstate is referenced here directly (instead of ::ChainstateActive()) because it
     // may not have been initialized yet.
+    DEV_TRACE("Shutdown: flushing chainstate to disk");
     {
         LOCK(cs_main);
         if (g_chainstate && g_chainstate->CanFlushToDisk()) {
@@ -266,6 +272,7 @@ void Shutdown(NodeContext& node)
     // up with our current chain to avoid any strange pruning edge cases and make
     // next startup faster by avoiding rescan.
 
+    DEV_TRACE("Shutdown: stopping indexes and resetting chain views");
     {
         LOCK(cs_main);
         if (g_chainstate && g_chainstate->CanFlushToDisk()) {
@@ -286,13 +293,21 @@ void Shutdown(NodeContext& node)
     }
 #endif
 
-    if(fBootstrap) {
+    if (fBootstrap) {
+        /* Legacy in-memory flag from older builds; current flow applies on next startup. */
         try {
+            LogActivity("Bootstrap apply: legacy shutdown-path starting");
             applyBootstrap();
-        } catch(std::exception &e) {
-            LogPrintf("%s: Unable to change database: %s\n",__func__,e.what());
+            clearBootstrapApplyPending();
+            fBootstrap = false;
+        } catch (std::exception& e) {
+            LogActivity("Bootstrap apply: legacy shutdown-path failed: %s", e.what());
+            LogPrintf("%s: Unable to change database: %s\n", __func__, e.what());
         }
     }
+
+    LogActivity("Shutdown: core teardown complete");
+    DEV_TRACE("Shutdown: finished");
 
     node.chain_clients.clear();
     UnregisterAllValidationInterfaces();
@@ -392,7 +407,7 @@ void SetupServerArgs()
     gArgs.AddArg("-conf=<file>", strprintf("Specify configuration file. Relative paths will be prefixed by datadir location. (default: %s)", BITCOIN_CONF_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     gArgs.AddArg("-datadir=<dir>", "Specify data directory", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     gArgs.AddArg("-dbbatchsize", strprintf("Maximum database write batch size in bytes (default: %u)", nDefaultDbBatchSize), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::OPTIONS);
-    gArgs.AddArg("-dbcache=<n>", strprintf("Maximum database cache size <n> MiB (%d to %d, default: %d). In addition, unused mempool memory is shared for this cache (see -maxmempool).", nMinDbCache, nMaxDbCache, nDefaultDbCache), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    gArgs.AddArg("-dbcache=<n>", strprintf("Maximum database cache size <n> MiB (%d to %d, default: %d on this system when RAM is detected, otherwise %d). In addition, unused mempool memory is shared for this cache (see -maxmempool).", nMinDbCache, nMaxDbCache, GetDefaultDbCache(), nDefaultDbCache), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     gArgs.AddArg("-debuglogfile=<file>", strprintf("Specify location of debug log file. Relative paths will be prefixed by a net-specific datadir location. (-nodebuglogfile to disable; default: %s)", DEFAULT_DEBUGLOGFILE), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     gArgs.AddArg("-feefilter", strprintf("Tell other nodes to filter invs to us by our mempool min fee (default: %u)", DEFAULT_FEEFILTER), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::OPTIONS);
     gArgs.AddArg("-includeconf=<file>", "Specify additional configuration file, relative to the -datadir path (only useable from configuration file, not command line)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -578,16 +593,11 @@ void SetupServerArgs()
 
 std::string LicenseInfo()
 {
-    const std::string URL_SOURCE_CODE = "<https://github.com/VeriConomy/veribase>";
-
     return CopyrightHolders(strprintf(_("Copyright (C) %i-%i").translated, 2009, COPYRIGHT_YEAR) + " ") + "\n" +
            "\n" +
            strprintf(_("Please contribute if you find %s useful. "
                        "Visit %s for further information about the software.").translated,
                PACKAGE_NAME, "<" PACKAGE_URL ">") +
-           "\n" +
-           strprintf(_("The source code is available from %s.").translated,
-               URL_SOURCE_CODE) +
            "\n" +
            "\n" +
            _("This is experimental software.").translated + "\n" +
@@ -981,6 +991,8 @@ bool AppInitParameterInteraction()
         }
     }
 
+    ApplyDevMaxTraceLoggingDefaults();
+
     // Checkmempool and checkblockindex default to true in regtest mode
     int ratio = std::min<int>(std::max<int>(gArgs.GetArg("-checkmempool", chainparams.DefaultConsistencyChecks() ? 1 : 0), 0), 1000000);
     if (ratio != 0) {
@@ -1140,6 +1152,35 @@ bool AppInitMain(NodeContext& node)
     if (!LogInstance().StartLogging()) {
             return InitError(strprintf("Could not open debug log file %s",
                 LogInstance().m_file_path.string()));
+    }
+
+    InitActivityLog();
+    InitDevHelperLogMirror();
+    uiInterface.InitMessage_connect([](const std::string& message) {
+        LogActivityEx(ActivityLevel::Info, nullptr, 0, nullptr, "Init: %s", message.c_str());
+    });
+    uiInterface.ShowProgress_connect([](const std::string& title, int nProgress, bool resume_possible) {
+        (void)resume_possible;
+        LogActivityEx(ActivityLevel::Progress, nullptr, 0, nullptr, "Progress: %s (%d%%)", title.c_str(), nProgress);
+    });
+
+    LogActivity("Startup: AppInitMain entered");
+#if ENABLE_DEV_HELPER_WINDOW
+    if (IsDeveloperEditionActive()) {
+        LogActivityEx(ActivityLevel::Info, __FILE__, __LINE__, __func__,
+            "Developer Edition active (%s)", GetDeveloperEditionVersionString().c_str());
+    }
+#endif
+
+    if (bootstrapApplyPending()) {
+        uiInterface.InitMessage(_("Applying bootstrap chain data...").translated);
+        try {
+            applyBootstrap();
+            clearBootstrapApplyPending();
+        } catch (const std::exception& e) {
+            LogActivity("Bootstrap apply: startup failed: %s", e.what());
+            return InitError(strprintf(_("Failed to apply bootstrap: %s").translated, e.what()));
+        }
     }
 
     if (!LogInstance().m_log_timestamps)
@@ -1397,7 +1438,16 @@ bool AppInitMain(NodeContext& node)
     bool fReindexChainState = gArgs.GetBoolArg("-reindex-chainstate", false);
 
     // cache size calculations
-    int64_t nTotalCache = (gArgs.GetArg("-dbcache", nDefaultDbCache) << 20);
+    const int64_t nConfiguredDbCache = gArgs.GetArg("-dbcache", GetDefaultDbCache());
+    if (!gArgs.IsArgSet("-dbcache")) {
+        if (const Optional<size_t> total_ram = GetTotalRAM()) {
+            LogPrintf("Using RAM-based default -dbcache=%d MiB (detected %d MiB system RAM)\n",
+                nConfiguredDbCache, static_cast<int>(*total_ram >> 20));
+        } else {
+            LogPrintf("Using default -dbcache=%d MiB (system RAM not detected)\n", nConfiguredDbCache);
+        }
+    }
+    int64_t nTotalCache = (nConfiguredDbCache << 20);
     nTotalCache = std::max(nTotalCache, nMinDbCache << 20); // total cache cannot be less than nMinDbCache
     nTotalCache = std::min(nTotalCache, nMaxDbCache << 20); // total cache cannot be greater than nMaxDbcache
     int64_t nBlockTreeDBCache = std::min(nTotalCache / 8, nMaxBlockDBCache << 20);
@@ -1538,6 +1588,9 @@ bool AppInitMain(NodeContext& node)
                 if (!is_coinsview_empty) {
                     uiInterface.InitMessage(_("Verifying blocks...").translated);
                     LogPrintf("Verifying blocks...\n");
+                    LogActivity("Startup: VerifyDB begin (checklevel=%d checkblocks=%d)",
+                        gArgs.GetArg("-checklevel", DEFAULT_CHECKLEVEL),
+                        gArgs.GetArg("-checkblocks", DEFAULT_CHECKBLOCKS));
 
                     CBlockIndex* tip = ::ChainActive().Tip();
                     RPCNotifyBlockChange(true, tip);
@@ -1550,9 +1603,12 @@ bool AppInitMain(NodeContext& node)
 
                     if (!CVerifyDB().VerifyDB(chainparams, &::ChainstateActive().CoinsDB(), gArgs.GetArg("-checklevel", DEFAULT_CHECKLEVEL),
                                   gArgs.GetArg("-checkblocks", DEFAULT_CHECKBLOCKS))) {
+                        LogActivityEx(ActivityLevel::Error, __FILE__, __LINE__, __func__,
+                            "Startup: VerifyDB failed (corrupted block database)");
                         strLoadError = _("Corrupted block database detected").translated;
                         break;
                     }
+                    LogActivity("Startup: VerifyDB complete");
                 }
             } catch (const std::exception& e) {
                 LogPrintf("%s\n", e.what());
@@ -1602,11 +1658,15 @@ bool AppInitMain(NodeContext& node)
     }
 
     // ********************************************************* Step 9: load wallet
+    LogActivity("Startup: loading wallets");
     for (const auto& client : node.chain_clients) {
         if (!client->load()) {
+            LogActivityEx(ActivityLevel::Error, __FILE__, __LINE__, __func__,
+                "Startup: wallet load failed");
             return false;
         }
     }
+    LogActivity("Startup: wallets loaded");
 
     // ********************************************************* Step 11: import blocks
 
@@ -1734,6 +1794,8 @@ bool AppInitMain(NodeContext& node)
 
     // ********************************************************* Step 13: finished
 
+    LogActivity("Startup: AppInitMain complete (nBestHeight=%d)", chain_active_height);
+    StartDevMaxTraceHeartbeat(node);
     SetRPCWarmupFinished();
     uiInterface.InitMessage(_("Loading...").translated);
 

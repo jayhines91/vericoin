@@ -1630,12 +1630,12 @@ void CConnman::ThreadDNSAddressSeed()
             ServiceFlags requiredServiceBits = GetDesirableServiceFlags(NODE_NONE);
             std::string host = strprintf("x%x.%s", requiredServiceBits, seed);
             CNetAddr resolveSource;
-            if (!resolveSource.SetInternal(host)) {
+            if (!resolveSource.SetInternal(seed)) {
                 continue;
             }
             unsigned int nMaxIPs = 256; // Limits number of IPs learned from a DNS seed
-            if (LookupHost(host, vIPs, nMaxIPs, true)) {
-                for (const CNetAddr& ip : vIPs) {
+            auto addSeedIPs = [&](const std::vector<CNetAddr>& ips) {
+                for (const CNetAddr& ip : ips) {
                     int nOneDay = 24*3600;
                     CAddress addr = CAddress(CService(ip, Params().GetDefaultPort()), requiredServiceBits);
                     addr.nTime = GetTime() - 3*nOneDay - rng.randrange(4*nOneDay); // use a random age between 3 and 7 days old
@@ -1643,9 +1643,20 @@ void CConnman::ThreadDNSAddressSeed()
                     found++;
                 }
                 addrman.Add(vAdd, resolveSource);
+            };
+            // Prefer the root hostname first so manually maintained CloudFlare A records
+            // work without a live dnsseed crawler or cf-uploader.
+            if (LookupHost(seed, vIPs, nMaxIPs, true)) {
+                LogPrintf("Loading addresses from DNS seed %s\n", seed);
+                addSeedIPs(vIPs);
+            } else if (LookupHost(host, vIPs, nMaxIPs, true)) {
+                if (!resolveSource.SetInternal(host)) {
+                    continue;
+                }
+                LogPrintf("Loading addresses from DNS seed %s (service-bit subdomain)\n", host);
+                addSeedIPs(vIPs);
             } else {
-                // We now avoid directly using results from DNS Seeds which do not support service bit filtering,
-                // instead using them as a oneshot to get nodes with our desired service bits.
+                // Last resort: try connecting to the seed hostname itself.
                 AddOneShot(seed);
             }
         }
@@ -2207,6 +2218,10 @@ void CConnman::SetNetworkActive(bool active)
     }
 
     fNetworkActive = active;
+
+    if (!fNetworkActive) {
+        DisconnectNodes();
+    }
 
     uiInterface.NotifyNetworkActiveChanged(fNetworkActive);
 }

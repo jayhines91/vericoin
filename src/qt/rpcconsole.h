@@ -10,6 +10,8 @@
 
 #include <net.h>
 
+#include <boost/signals2/connection.hpp>
+
 #include <QWidget>
 #include <QCompleter>
 #include <QThread>
@@ -30,6 +32,8 @@ namespace Ui {
 QT_BEGIN_NAMESPACE
 class QMenu;
 class QItemSelection;
+class QPlainTextEdit;
+class QPushButton;
 QT_END_NAMESPACE
 
 /** Local Bitcoin RPC console. */
@@ -62,10 +66,11 @@ public:
         INFO,
         CONSOLE,
         GRAPH,
-        PEERS
+        PEERS,
+        ACTIVITY
     };
 
-    std::vector<TabTypes> tabs() const { return {TabTypes::INFO, TabTypes::CONSOLE, TabTypes::GRAPH, TabTypes::PEERS}; }
+    std::vector<TabTypes> tabs() const { return {TabTypes::INFO, TabTypes::CONSOLE, TabTypes::GRAPH, TabTypes::PEERS, TabTypes::ACTIVITY}; }
 
     QString tabTitle(TabTypes tab_type) const;
     QKeySequence tabShortcut(TabTypes tab_type) const;
@@ -79,6 +84,7 @@ private Q_SLOTS:
     void on_tabWidget_currentChanged(int index);
     /** open the debug.log from the current datadir */
     void on_openDebugLogfileButton_clicked();
+    void on_openActivityLogButton_clicked();
     /** change the time range of the network traffic graph */
     void on_sldGraphRange_valueChanged(int value);
     /** update traffic statistics */
@@ -103,6 +109,7 @@ public Q_SLOTS:
     /** Append the message to the message widget */
     void message(int category, const QString &msg) { message(category, msg, false); }
     void message(int category, const QString &message, bool html);
+    void appendActivityLine(const QString& line);
     /** Set number of connections shown in the UI */
     void setNumConnections(int count);
     /** Set network state shown in the UI */
@@ -165,6 +172,9 @@ private:
     QCompleter *autoCompleter = nullptr;
     QThread thread;
     WalletModel* m_last_wallet_model{nullptr};
+    QPlainTextEdit* m_activityWidget = nullptr;
+    QPushButton* m_openActivityLogButton = nullptr;
+    boost::signals2::scoped_connection m_activity_connection;
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();

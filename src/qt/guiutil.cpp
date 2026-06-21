@@ -18,6 +18,7 @@
 #include <protocol.h>
 #include <script/script.h>
 #include <script/standard.h>
+#include <util/activitylog.h>
 #include <util/system.h>
 
 #ifdef WIN32
@@ -57,6 +58,7 @@
 #include <QTextDocument> // for Qt::mightBeRichText
 #include <QThread>
 #include <QUrlQuery>
+#include <QWidget>
 #include <QtGlobal>
 
 #if defined(Q_OS_MAC)
@@ -394,6 +396,14 @@ void openDebugLogfile()
     /* Open debug.log with the associated application */
     if (fs::exists(pathDebug))
         QDesktopServices::openUrl(QUrl::fromLocalFile(boostPathToQString(pathDebug)));
+}
+
+void openActivityLogfile()
+{
+    const fs::path pathActivity = GetActivityLogPath();
+
+    if (fs::exists(pathActivity))
+        QDesktopServices::openUrl(QUrl::fromLocalFile(boostPathToQString(pathActivity)));
 }
 
 bool openBitcoinConf()
@@ -914,6 +924,41 @@ void LogQtInfo()
     LogPrintf("System: %s, %s\n", QSysInfo::prettyProductName().toStdString(), QSysInfo::buildAbi().toStdString());
     for (const QScreen* s : QGuiApplication::screens()) {
         LogPrintf("Screen: %s %dx%d, pixel ratio=%.1f\n", s->name().toStdString(), s->size().width(), s->size().height(), s->devicePixelRatio());
+    }
+}
+
+void ensureWidgetOnScreen(QWidget* widget)
+{
+    if (!widget) return;
+
+    QRect frame = widget->frameGeometry();
+    QScreen* screen = QGuiApplication::screenAt(frame.center());
+    if (!screen) screen = QGuiApplication::screenAt(frame.topLeft());
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    if (!screen) return;
+
+    const QRect avail = screen->availableGeometry();
+    const int w = frame.width();
+    const int h = frame.height();
+    int x = frame.x();
+    int y = frame.y();
+
+    // Saved geometry from another session/monitor often lands off-screen in RDP.
+    const bool mostly_off_screen =
+        x + w < avail.left() + 80 || x > avail.right() - 80 ||
+        y + h < avail.top() + 80 || y > avail.bottom() - 80;
+    if (mostly_off_screen) {
+        x = avail.x() + (avail.width() - w) / 2;
+        y = avail.y() + (avail.height() - h) / 2;
+    } else {
+        const int max_x = avail.right() - w + 1;
+        const int max_y = avail.bottom() - h + 1;
+        x = qBound(avail.left(), x, max_x < avail.left() ? avail.left() : max_x);
+        y = qBound(avail.top(), y, max_y < avail.top() ? avail.top() : max_y);
+    }
+
+    if (frame.topLeft() != QPoint(x, y)) {
+        widget->move(x, y);
     }
 }
 

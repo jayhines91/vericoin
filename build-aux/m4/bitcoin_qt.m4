@@ -122,10 +122,10 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
       AC_DEFINE(QT_QPA_PLATFORM_MINIMAL, 1, [Define this symbol if the minimal qt platform exists])
     fi
     if test "x$TARGET_OS" = xwindows; then
-      _BITCOIN_QT_CHECK_STATIC_PLUGINS([Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)],[-lqwindows])
+      _BITCOIN_QT_CHECK_STATIC_PLUGINS([Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)],[-lqwindows -lQt5FontDatabaseSupport -lQt5EventDispatcherSupport -lQt5ThemeSupport -lQt5FbSupport -lQt5AccessibilitySupport -lQt5EdidSupport -lQt5WindowsUIAutomationSupport -lQt5Gui -lQt5Core -lqtpcre2 -lqtlibpng -lqtharfbuzz -lz -limm32 -lnetapi32 -luserenv -lmpr -lwtsapi32 -ldwmapi -luxtheme -lversion])
       AC_DEFINE(QT_QPA_PLATFORM_WINDOWS, 1, [Define this symbol if the qt platform is windows])
     elif test "x$TARGET_OS" = xlinux; then
-      _BITCOIN_QT_CHECK_STATIC_PLUGINS([Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)],[-lqxcb -lxcb-static])
+      _BITCOIN_QT_CHECK_STATIC_PLUGINS([Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)],[-lqxcb])
       AC_DEFINE(QT_QPA_PLATFORM_XCB, 1, [Define this symbol if the qt platform is xcb])
     elif test "x$TARGET_OS" = xdarwin; then
       AX_CHECK_LINK_FLAG([[-framework IOKit]],[QT_LIBS="$QT_LIBS -framework IOKit"],[AC_MSG_ERROR(could not iokit framework)])
@@ -321,6 +321,10 @@ AC_DEFUN([_BITCOIN_QT_FIND_STATIC_PLUGINS],[
         PKG_CHECK_MODULES([QTCLIPBOARD], [Qt5ClipboardSupport], [QT_LIBS="-lQt5ClipboardSupport $QT_LIBS"])
         PKG_CHECK_MODULES([QTGRAPHICS], [Qt5GraphicsSupport], [QT_LIBS="-lQt5GraphicsSupport $QT_LIBS"])
         PKG_CHECK_MODULES([QTCGL], [Qt5CglSupport], [QT_LIBS="-lQt5CglSupport $QT_LIBS"])
+      elif test "x$TARGET_OS" = xwindows; then
+        PKG_CHECK_MODULES([QTWINDOWSUIAUTOMATION], [Qt5WindowsUIAutomationSupport], [QT_LIBS="-lQt5WindowsUIAutomationSupport $QT_LIBS"])
+        PKG_CHECK_MODULES([QTEDID], [Qt5EdidSupport], [QT_LIBS="-lQt5EdidSupport $QT_LIBS"])
+        QT_LIBS="$QT_LIBS -lwtsapi32 -ldwmapi -luxtheme -lversion"
       fi
     fi
 ])

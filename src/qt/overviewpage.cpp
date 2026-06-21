@@ -275,6 +275,9 @@ void OverviewPage::updateWatchOnlyLabels(bool showWatchOnly)
 
 void OverviewPage::setVericoinInfo()
 {
+    if (m_node.isInitialBlockDownload())
+        return;
+
     ui->labelMinerHashrateOrInterest->setText(QString("%1 %").arg(QString::number( m_node.getCurrentInterestRate(), 'f', 2)));
     ui->labelEstNextRewardOrInflation->setText(QString("%1 %").arg(QString::number( m_node.getCurrentInflationRate(), 'f', 2)));
     ui->labelblockRewardOrNetworkStaking->setText(QString("%1 %").arg(QString::number(((m_node.getNetworkStakeWeight()/2)/30000000)*100,'f',2)));
@@ -282,6 +285,9 @@ void OverviewPage::setVericoinInfo()
 
 void OverviewPage::setVeriumInfo()
 {
+    if (m_node.isInitialBlockDownload())
+        return;
+
     if(walletModel && walletModel->getOptionsModel()) {
         int unit = walletModel->getOptionsModel()->getDisplayUnit();
         ui->labelblockRewardOrNetworkStaking->setText(BitcoinUnits::formatWithUnit(unit, m_node.getBlockReward(), false, BitcoinUnits::separatorAlways));
@@ -296,13 +302,21 @@ void OverviewPage::setClientModel(ClientModel *model)
         connect(model, &ClientModel::alertsChanged, this, &OverviewPage::updateAlerts);
         updateAlerts(model->getStatusBarWarnings());
 
-        // On Vericoin, update interest / inflation / ... every block update
+        // On Vericoin, refresh staking stats on a timer; skip per-block updates during IBD.
         if( GUIUtil::IsVericoin() ) {
             setVericoinInfo();
-            connect(model, &ClientModel::numBlocksChanged, this, &OverviewPage::setVericoinInfo);
+            connect(model, &ClientModel::numBlocksChanged, this, [this](int, const QDateTime&, double, bool header) {
+                if (header || m_node.isInitialBlockDownload())
+                    return;
+                setVericoinInfo();
+            });
         } else {
             setVeriumInfo();
-            connect(model, &ClientModel::numBlocksChanged, this, &OverviewPage::setVeriumInfo);
+            connect(model, &ClientModel::numBlocksChanged, this, [this](int, const QDateTime&, double, bool header) {
+                if (header || m_node.isInitialBlockDownload())
+                    return;
+                setVeriumInfo();
+            });
         }
     }
 }
@@ -383,6 +397,13 @@ void OverviewPage::showOutOfSyncWarning(bool fShow)
 
 void OverviewPage::updateStats()
 {
+    if (!m_node.isInitialBlockDownload()) {
+        if (GUIUtil::IsVericoin())
+            setVericoinInfo();
+        else
+            setVeriumInfo();
+    }
+
     if( GUIUtil::IsVericoin() ) {
         if( m_node.isStaking() ) {
             ui->mineButton->setIcon(QIcon(":/icons/stakingon"));

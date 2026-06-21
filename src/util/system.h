@@ -412,6 +412,9 @@ std::string HelpMessageOpt(const std::string& option, const std::string& message
  */
 int GetNumCores();
 
+/** Total installed physical RAM in bytes, if the OS reports it. */
+Optional<size_t> GetTotalRAM();
+
 inline uint32_t ByteReverse(uint32_t value)
 {
     value = ((value & 0xFF00FF00) >> 8) | ((value & 0x00FF00FF) << 8);

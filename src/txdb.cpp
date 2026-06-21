@@ -16,7 +16,43 @@
 
 #include <stdint.h>
 
+#include <algorithm>
+#include <limits>
+
 #include <boost/thread.hpp>
+
+namespace {
+
+constexpr int64_t DBCACHE_TIER_8GIB_MIB = 1024;
+constexpr int64_t DBCACHE_TIER_4GIB_MIB = 768;
+constexpr int64_t DBCACHE_TIER_2GIB_MIB = 512;
+constexpr size_t ONE_GIB = 1024ULL * 1024ULL * 1024ULL;
+
+} // namespace
+
+int64_t GetDefaultDbCache()
+{
+    if (sizeof(void*) < 8) {
+        return nDefaultDbCache;
+    }
+
+    const Optional<size_t> total_ram = GetTotalRAM();
+    if (!total_ram) {
+        return nDefaultDbCache;
+    }
+
+    const size_t ram_gib = *total_ram / ONE_GIB;
+    if (ram_gib >= 8) {
+        return DBCACHE_TIER_8GIB_MIB;
+    }
+    if (ram_gib >= 4) {
+        return DBCACHE_TIER_4GIB_MIB;
+    }
+    if (ram_gib >= 2) {
+        return DBCACHE_TIER_2GIB_MIB;
+    }
+    return nDefaultDbCache;
+}
 
 static const char DB_COIN = 'C';
 static const char DB_COINS = 'c';

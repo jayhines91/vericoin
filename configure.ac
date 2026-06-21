@@ -1,11 +1,11 @@
 AC_PREREQ([2.69])
 define(_CLIENT_VERSION_MAJOR, 2)
-define(_CLIENT_VERSION_MINOR, 0)
-define(_CLIENT_VERSION_REVISION, 1)
-define(_CLIENT_VERSION_BUILD, 1)
+define(_CLIENT_VERSION_MINOR, 2)
+define(_CLIENT_VERSION_REVISION, 5)
+define(_CLIENT_VERSION_BUILD, 0)
 define(_CLIENT_VERSION_RC, 0)
 define(_CLIENT_VERSION_IS_RELEASE, false)
-define(_COPYRIGHT_YEAR, 2021)
+define(_COPYRIGHT_YEAR, 2026)
 define(_COPYRIGHT_HOLDERS,[The %s developers])
 define(_COPYRIGHT_HOLDERS_SUBSTITUTION,[[Vericonomy Core]])
 AC_INIT([Vericoin],m4_join([.], _CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MINOR, _CLIENT_VERSION_REVISION, m4_if(_CLIENT_VERSION_BUILD, [0], [], _CLIENT_VERSION_BUILD))m4_if(_CLIENT_VERSION_RC, [0], [], [rc]_CLIENT_VERSION_RC),[https://github.com/VeriConomy/veribase/issues],[Vericoin],[https://vericonomy.com/])
@@ -258,6 +258,18 @@ AC_ARG_ENABLE([debug],
                     [use compiler flags and macros suited for debugging (default is no)])],
     [enable_debug=$enableval],
     [enable_debug=no])
+
+dnl Developer Edition max trace (out-windows-dev-max): auto -debug=all, consensus activity log, heartbeat
+AC_ARG_ENABLE([dev-max-trace],
+    [AS_HELP_STRING([--enable-dev-max-trace],
+                    [enable maximum Developer Edition tracing (default is no)])],
+    [enable_dev_max_trace=$enableval],
+    [enable_dev_max_trace=no])
+if test "x$enable_dev_max_trace" = xyes; then
+  AC_DEFINE([DEV_EDITION_MAX_VERBOSITY], [1], [Define to 1 for max-trace Developer Edition builds.])
+else
+  AC_DEFINE([DEV_EDITION_MAX_VERBOSITY], [0], [Define to 1 for max-trace Developer Edition builds.])
+fi
 
 dnl Enable different -fsanitize options
 AC_ARG_WITH([sanitizers],
@@ -1116,7 +1128,7 @@ else
   BITCOIN_QT_INIT
 
   dnl sets $bitcoin_enable_qt, $bitcoin_enable_qt_test, $bitcoin_enable_qt_dbus
-  BITCOIN_QT_CONFIGURE([$use_pkgconfig])
+  BITCOIN_QT_CONFIGURE([5.15.0])
 fi
 
 if test x$enable_wallet != xno; then

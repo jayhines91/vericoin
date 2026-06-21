@@ -48,6 +48,7 @@ QT_MOC_CPP = \
   qt/moc_bitcoingui.cpp \
   qt/moc_bitcoinunits.cpp \
   qt/moc_bootstrapdialog.cpp \
+  qt/moc_devhelperwindow.cpp \
   qt/moc_clientmodel.cpp \
   qt/moc_coincontroldialog.cpp \
   qt/moc_coincontroltreewidget.cpp \
@@ -119,6 +120,8 @@ BITCOIN_QT_H = \
   qt/bitcoingui.h \
   qt/bitcoinunits.h \
   qt/bootstrapdialog.h \
+  qt/devhelperwindow.h \
+  qt/devtools.h \
   qt/clientmodel.h \
   qt/coincontroldialog.h \
   qt/coincontroltreewidget.h \
@@ -155,6 +158,7 @@ BITCOIN_QT_H = \
   qt/sendcoinsrecipient.h \
   qt/signverifymessagedialog.h \
   qt/splashscreen.h \
+  qt/splashscreen_devel.h \
   qt/trafficgraphwidget.h \
   qt/transactiondesc.h \
   qt/transactiondescdialog.h \
@@ -249,6 +253,8 @@ BITCOIN_QT_BASE_CPP = \
   qt/bitcoingui.cpp \
   qt/bitcoinunits.cpp \
   qt/bootstrapdialog.cpp \
+  qt/devhelperwindow.cpp \
+  qt/devtools.cpp \
   qt/clientmodel.cpp \
   qt/csvmodelwriter.cpp \
   qt/guiutil.cpp \
@@ -265,6 +271,7 @@ BITCOIN_QT_BASE_CPP = \
   qt/qvaluecombobox.cpp \
   qt/rpcconsole.cpp \
   qt/splashscreen.cpp \
+  qt/splashscreen_devel.cpp \
   qt/trafficgraphwidget.cpp \
   qt/updatedialog.cpp \
   qt/utilitydialog.cpp

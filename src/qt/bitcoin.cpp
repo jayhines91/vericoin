@@ -9,7 +9,14 @@
 #include <qt/bitcoin.h>
 #include <qt/bitcoingui.h>
 
+#include <util/devhelperconfig.h>
+#if ENABLE_DEV_HELPER_WINDOW
+#include <qt/devtools.h>
+#endif
+#include <util/devedition.h>
+
 #include <chainparams.h>
+#include <downloader.h>
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -32,10 +39,11 @@
 #include <noui.h>
 #include <ui_interface.h>
 #include <uint256.h>
+#include <util/activitylog.h>
 #include <util/system.h>
 #include <util/threadnames.h>
 
-#include <memory>
+#include <QRect>
 
 #include <QApplication>
 #include <QDebug>
@@ -119,12 +127,25 @@ static void initTranslations(QTranslator &qtTranslatorBase, QTranslator &qtTrans
 /* qDebug() message handler --> debug.log */
 void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString &msg)
 {
-    Q_UNUSED(context);
+    ActivityLevel level = ActivityLevel::Info;
+    switch (type) {
+    case QtDebugMsg: level = ActivityLevel::Debug; break;
+    case QtWarningMsg: level = ActivityLevel::Warning; break;
+    case QtCriticalMsg:
+    case QtFatalMsg: level = ActivityLevel::Error; break;
+    case QtInfoMsg: level = ActivityLevel::Info; break;
+    }
+
     if (type == QtDebugMsg) {
         LogPrint(BCLog::QT, "GUI: %s\n", msg.toStdString());
     } else {
         LogPrintf("GUI: %s\n", msg.toStdString());
     }
+
+    const char* file = context.file ? context.file : nullptr;
+    const int line = context.line;
+    const char* function = context.function ? context.function : "Qt";
+    LogActivityEx(level, file, line, function, "GUI: %s", msg.toStdString().c_str());
 }
 
 BitcoinCore::BitcoinCore(interfaces::Node& node) :
@@ -142,6 +163,7 @@ void BitcoinCore::initialize()
 {
     try
     {
+        DEV_TRACE("GUI: starting AppInitMain on qt-init thread");
         qDebug() << __func__ << ": Running initialization in thread";
         util::ThreadRename("qt-init");
         bool rv = m_node.appInitMain();
@@ -290,10 +312,14 @@ void BitcoinApplication::requestInitialize()
 
 void BitcoinApplication::requestShutdown()
 {
+    const std::string hint = getBootstrapShutdownHint();
+    const QString detail = hint.empty() ? QString() : QString::fromStdString(hint);
+    DEV_TRACE("GUI: shutdown requested");
+    LogActivity("GUI: shutdown requested");
     // Show a simple window indicating shutdown status
     // Do this first as some of the steps may take some time below,
     // for example the RPC console may still be executing a command.
-    shutdownWindow.reset(ShutdownWindow::showShutdownWindow(window));
+    shutdownWindow.reset(ShutdownWindow::showShutdownWindow(window, detail));
 
     qDebug() << __func__ << ": Requesting shutdown";
     startThread();
@@ -319,6 +345,7 @@ void BitcoinApplication::requestShutdown()
 void BitcoinApplication::initializeResult(bool success)
 {
     qDebug() << __func__ << ": Initialization result: " << success;
+    DEV_TRACE("GUI: AppInitMain finished success=%s", success ? "true" : "false");
     // Set exit result.
     returnValue = success ? EXIT_SUCCESS : EXIT_FAILURE;
     if(success)
@@ -396,6 +423,9 @@ static void SetupUIArgs()
     gArgs.AddArg("-min", "Start minimized", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     gArgs.AddArg("-resetguisettings", "Reset all settings changed in the GUI", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     gArgs.AddArg("-splash", strprintf("Show splash screen on startup (default: %u)", DEFAULT_SPLASHSCREEN), ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
+#if ENABLE_DEV_HELPER_WINDOW
+    gArgs.AddArg("-devedition", "Enable Developer Edition branding and tools (requires compile flag and master password for tools)", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
+#endif
     gArgs.AddArg("-uiplatform", strprintf("Select platform to customize UI for (one of windows, macosx, other; default: %s)", BitcoinGUI::DEFAULT_UIPLATFORM), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::GUI);
 }
 
@@ -567,6 +597,11 @@ int GuiMain(int argc, char* argv[])
     try
     {
         app.createWindow(networkStyle.data());
+#if ENABLE_DEV_HELPER_WINDOW
+        // Blocking prompt before init/bootstrap so trace captures the full startup path.
+        if (IsDeveloperEditionActive())
+            DevTools::OfferStartupTraceWindow(app.getWindow());
+#endif
         // Perform base initialization before spinning up initialization/shutdown thread
         // This is acceptable because this function only contains steps that are quick to execute,
         // so the GUI thread won't be held up.
