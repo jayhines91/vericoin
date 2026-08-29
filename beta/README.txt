@@ -2,8 +2,7 @@ Vericoin 2.1.1 Beta
 ========================
 Version: 2.1.1
 
-2.1.1 baseline: clean 2.0.1 chain logic plus QoL upgrades only.
-No IBD/catch-up PoST attestation changes from the 2.1.0 beta line.
+2.1.1 baseline: clean 2.0.1 chain logic plus QoL upgrades.
 
 Build with: Build-Scripts/build-beta-release.sh (all platforms)
              Build-Scripts/build-beta-macos.sh (macOS only)
