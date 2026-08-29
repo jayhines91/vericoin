@@ -80,6 +80,16 @@ void OptionsModel::Init(bool resetSettings)
         settings.setValue("fCoinControlFeatures", false);
     fCoinControlFeatures = settings.value("fCoinControlFeatures", false).toBool();
 
+    if (gArgs.IsArgSet("-uidarkmode")) {
+        fDarkMode = gArgs.GetBoolArg("-uidarkmode", false);
+        settings.setValue("fDarkMode", fDarkMode);
+        addOverriddenOption("-uidarkmode");
+    } else {
+        if (!settings.contains("fDarkMode"))
+            settings.setValue("fDarkMode", false);
+        fDarkMode = settings.value("fDarkMode", false).toBool();
+    }
+
     // These are shared with the core or have a command-line parameter
     // and we want command-line parameters to overwrite the GUI settings.
     //
@@ -288,6 +298,8 @@ QVariant OptionsModel::data(const QModelIndex & index, int role) const
             return settings.value("nThreadsScriptVerif");
         case Listen:
             return settings.value("fListen");
+        case DarkMode:
+            return fDarkMode;
         default:
             return QVariant();
         }
@@ -387,6 +399,13 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
 #endif
         case DisplayUnit:
             setDisplayUnit(value);
+            break;
+        case DarkMode:
+            if (settings.value("fDarkMode") != value) {
+                settings.setValue("fDarkMode", value.toBool());
+                fDarkMode = value.toBool();
+                Q_EMIT darkModeChanged(fDarkMode);
+            }
             break;
         case ThirdPartyTxUrls:
             if (strThirdPartyTxUrls != value.toString()) {

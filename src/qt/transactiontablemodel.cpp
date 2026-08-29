@@ -410,10 +410,10 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
         {
         QString label = walletModel->getAddressTableModel()->labelForAddress(QString::fromStdString(wtx->address));
         if(label.isEmpty())
-            return COLOR_BAREADDRESS;
+            return GUIUtil::TxColorBareAddress();
         } break;
     case TransactionRecord::SendToSelf:
-        return COLOR_BAREADDRESS;
+        return GUIUtil::TxColorBareAddress();
     default:
         break;
     }
@@ -510,6 +510,16 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
     case Qt::DecorationRole:
     {
         QIcon icon = qvariant_cast<QIcon>(index.data(RawDecorationRole));
+        if (icon.isNull()) {
+            return QVariant();
+        }
+        // Status icons are black silhouettes on transparent — invert via palette in dark mode.
+        if (index.column() == Status) {
+            if (GUIUtil::DarkModeEnabled()) {
+                return platformStyle->TextColorIcon(icon);
+            }
+            return icon;
+        }
         return platformStyle->TextColorIcon(icon);
     }
     case Qt::DisplayRole:
@@ -556,21 +566,28 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
 
         if(index.column() == Amount && (rec->credit+rec->debit) > 0)
         {
-            return COLOR_POSITIVE;
+            return GUIUtil::TxColorPositive();
         }
 
         // Non-confirmed (but not immature) as transactions are grey
         if(!rec->status.countsForBalance && rec->status.status != TransactionStatus::Immature)
         {
-            return COLOR_UNCONFIRMED;
+            return GUIUtil::TxColorUnconfirmed();
         }
         if(index.column() == Amount && (rec->credit+rec->debit) < 0)
         {
-            return COLOR_NEGATIVE;
+            return GUIUtil::TxColorNegative();
         }
         if(index.column() == ToAddress)
         {
-            return addressColor(rec);
+            const QVariant addrColor = addressColor(rec);
+            if (addrColor.isValid()) {
+                return addrColor;
+            }
+        }
+        if (GUIUtil::DarkModeEnabled() &&
+            (index.column() == Date || index.column() == Type || index.column() == ToAddress)) {
+            return GUIUtil::TxColorPrimaryText();
         }
         break;
     case TypeRole:

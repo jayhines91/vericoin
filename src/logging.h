@@ -31,6 +31,10 @@ struct CLogCategoryActive
 };
 
 namespace BCLog {
+
+/** True while a print callback is running (avoids LogPrint re-entry deadlocks). */
+extern thread_local bool g_logger_in_print_callback;
+
     enum LogFlags : uint32_t {
         NONE        = 0,
         NET         = (1 <<  0),

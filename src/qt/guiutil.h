@@ -8,6 +8,7 @@
 #include <amount.h>
 #include <fs.h>
 
+#include <QColor>
 #include <QEvent>
 #include <QHeaderView>
 #include <QItemDelegate>
@@ -279,8 +280,30 @@ namespace GUIUtil
     QString GetCoinName();
     QString GetCurrencyName();
 
+    /** Whether the dark theme override layers are active (QSettings or -uidarkmode). */
+    bool DarkModeEnabled();
+
     /** Shared wallet stylesheet: common UI + coin-specific chrome (logos unchanged). */
     QString LoadWalletStyleSheet();
+
+    /** Re-apply LoadWalletStyleSheet() on QApplication (e.g. after toggling dark mode). */
+    void ApplyWalletStyleSheet();
+
+    /** Ensure QSS background-color paints on dialog panels (Qt::WA_StyledBackground). */
+    void EnableStyledBackground(QWidget* widget, bool recursive = false);
+
+    /** Style-sheet polish for tabbed utility dialogs (Options, Node window, etc.). */
+    void PolishModernShell(QWidget* root);
+
+    /** Theme-aware transaction / overview list colors. */
+    QColor TxColorPositive();
+    QColor TxColorNegative();
+    QColor TxColorUnconfirmed();
+    QColor TxColorBareAddress();
+    QColor TxColorPrimaryText();
+    QColor TxColorSecondaryText();
+    QColor TxOverviewRowFill();
+    QColor TxOverviewRowBorder();
 } // namespace GUIUtil
 
 #endif // BITCOIN_QT_GUIUTIL_H

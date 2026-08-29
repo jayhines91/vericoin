@@ -44,6 +44,14 @@ void WalletFrame::setClientModel(ClientModel *_clientModel)
     }
 }
 
+void WalletFrame::setWalletController(WalletController* wallet_controller)
+{
+    m_wallet_controller = wallet_controller;
+    for (auto i = mapWalletViews.constBegin(); i != mapWalletViews.constEnd(); ++i) {
+        i.value()->setWalletController(wallet_controller);
+    }
+}
+
 bool WalletFrame::addWallet(WalletModel *walletModel)
 {
     if (!gui || !clientModel || !walletModel) return false;
@@ -52,6 +60,7 @@ bool WalletFrame::addWallet(WalletModel *walletModel)
 
     WalletView *walletView = new WalletView(m_node, platformStyle, this);
     walletView->setClientModel(clientModel);
+    walletView->setWalletController(m_wallet_controller);
     walletView->setWalletModel(walletModel);
     walletView->showOutOfSyncWarning(bOutOfSync);
 

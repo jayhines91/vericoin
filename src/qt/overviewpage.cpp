@@ -48,19 +48,20 @@ public:
     {
         painter->save();
 
-        QIcon icon = qvariant_cast<QIcon>(index.data(TransactionTableModel::RawDecorationRole));
+        QIcon icon = qvariant_cast<QIcon>(index.data(Qt::DecorationRole));
         QRect mainRect = option.rect;
 
         // Anti aliasing + border
         painter->setRenderHint(QPainter::Antialiasing);
-        QPen pen(QColor(217, 217, 217), 1);
+        const QColor borderColor = GUIUtil::TxOverviewRowBorder();
+        QPen pen(borderColor, 1);
         painter->setPen(pen);
 
         // create rounded rectangle that contain the TX
         QPainterPath mainPath;
         QRect txRect(mainRect.left() + MARGIN_SIZE, mainRect.top() + MARGIN_SIZE, mainRect.width() - MARGIN_SIZE*2, DECORATION_SIZE);
         mainPath.addRoundedRect(txRect, 5, 5);
-        painter->fillPath(mainPath, QColor(230, 230, 230));
+        painter->fillPath(mainPath, GUIUtil::TxOverviewRowFill());
         painter->drawPath(mainPath);
 
         // Add icon
@@ -72,7 +73,7 @@ public:
 
         // Set default font
         QFont font("Lato", 9);
-        painter->setPen(QColor(102, 102, 102));
+        painter->setPen(GUIUtil::TxColorSecondaryText());
         painter->setFont(font);
 
         // Write Date & Address
@@ -84,14 +85,14 @@ public:
         qint64 amount = index.data(TransactionTableModel::AmountRole).toLongLong();
         bool confirmed = index.data(TransactionTableModel::ConfirmedRole).toBool();
 
-        QColor foreground = COLOR_POSITIVE;
+        QColor foreground = GUIUtil::TxColorPositive();
         if(amount < 0)
         {
-            foreground = COLOR_NEGATIVE;
+            foreground = GUIUtil::TxColorNegative();
         }
         else if(!confirmed)
         {
-            foreground = COLOR_UNCONFIRMED;
+            foreground = GUIUtil::TxColorUnconfirmed();
         }
 
         painter->setPen(foreground);

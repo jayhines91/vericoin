@@ -412,14 +412,13 @@ write_beta_readme() {
     "${ROOT}/depends/${MACOS_HOST}/include/QtCore/qconfig.h" 2>/dev/null || echo "unknown")
 
   cat > "${ROOT}/${BETA_DIR}/README.txt" <<EOF
-Vericoin Special Beta: PoST Catch-Up Validation
-================================================
+Vericoin ${version} Beta
+========================
 Version: ${version}
 Built: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-Tag: post-catchup-beta (ENABLE_POST_CATCHUP_VALIDATION_BETA=1)
 
-This is NOT a standard QoL beta. It replaces the 2.1.0.3 coinstake-sync
-band-aid with structural deferred PoST attestation during catch-up.
+2.1.1 baseline: clean 2.0.1 chain logic plus QoL upgrades only.
+No IBD/catch-up PoST attestation changes from the 2.1.0 beta line.
 
 Contents
 --------
@@ -444,36 +443,14 @@ macOS Qt:   ${qt_macos}
 Windows Qt: ${qt_win}
 OpenSSL:    1.1.1w
 
-Changes in this special beta (${version})
---------------------------------------
-PoST catch-up validation (full fix):
-- During sync: structural ConnectBlock only; defer GetCoinAge and stake reward
-  until tip == pindexBestHeader (kernel/signature always validated for modifier metadata)
-- At tip: forward fJustCheck ConnectBlock pass with full PoST checks (chain stays connected)
-- InvalidChainFound: no longer rewinds pindexBestHeader during catch-up
-- Removed 2.1.0.3 band-aid (recoverable string matching, ConnectTip flush retry,
-  InvalidBlockFound skip, MaybePunish recoverable skip)
-- 2.1.0.13: Linux beta statically links depends (Qt, OpenSSL, xcb/font stack); no bundled lib/
-- Static release: OpenSSL/curl/brotli hardened; macOS static beta path (build-beta-macos.sh)
-- 2.1.0.12: splash fix — no painted footer bar; restore blue/gray text on white PNG
-- 2.1.0.11: updated splash asset (crisp lettering); sync progress bar blue gradient (replaces orange)
-- 2.1.0.10: startup PoST metadata repair scan; defer kernel until repair completes;
-  Vericoin sidebar gray chrome; modern HiDPI splash (3600x1260 asset)
-- 2.1.0.9: fix attestation stall after staking — always record hashProofOfStake during
-  catch-up; attestation replay persists stake metadata and repairs from first missing proof
-- 2.1.0.8: fix attestation false kernel reject — GetWeight uses pindexPrev->pprev, not live tip
-- 2.1.0.7: persist post_attest_pending across restart; gate IBD/staking until attestation done
-- 2.1.0.6: fix attestation crash — advance scratch utxo best block during fJustCheck replay
-- 2.1.0.5: attestation uses in-memory utxo replay (no main-chain disconnect/reconnect)
-- 2.1.0.5: fix attestation mempool assert (queuedTx.empty on disconnect pool)
-- Legacy poison migration: AcceptBlockHeader still clears BLOCK_FAILED_* during catch-up
-
-UI identifies this build as "PoST Catch-Up Beta" (splash, title bar, About).
-
-Prior QoL beta items still included:
-- Qt 5.15.14, OpenSSL 1.1.1w
-- Wallet startup deadlock fixes
-- Bootstrap sync pause / progress fixes
+Changes in ${version}
+---------------------
+- Qt 5.15.14, OpenSSL 1.1.1w, updated depends/build scripts
+- Bootstrap download/apply with P2P pause and startup install
+- Modern splash screen and shared Vericonomy wallet styling
+- HTTPS bootstrap downloads (bundled Mozilla CA via curlssl)
+- RAM-tier default -dbcache; DNS seed hostname fallback
+- Static release linkage helpers for Linux/macOS beta tarballs
 
 Build script: Build-Scripts/build-beta-windows-only.sh (this run)
 EOF

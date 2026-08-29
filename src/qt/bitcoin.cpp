@@ -45,8 +45,10 @@
 
 #if defined(Q_OS_LINUX)
 #include <util/curlssl.h>
+#ifndef QT_NO_SSL
 #include <QSslCertificate>
 #include <QSslSocket>
+#endif
 #endif
 
 #include <QRect>
@@ -211,6 +213,7 @@ BitcoinApplication::BitcoinApplication(interfaces::Node& node):
     platformStyle(nullptr)
 {
     setQuitOnLastWindowClosed(false);
+    QApplication::setAttribute(Qt::AA_UseStyleSheetPropagationInWidgetStyles, true);
 }
 
 void BitcoinApplication::setupPlatformStyle()
@@ -224,8 +227,8 @@ void BitcoinApplication::setupPlatformStyle()
     if (!platformStyle) // Fall back to "other" if specified name not found
         platformStyle = PlatformStyle::instantiate("other");
     assert(platformStyle);
-    // Shared Vericonomy stylesheet (vericonomy-shared + vrc/vrm-chrome) on every platform.
-    qApp->setStyleSheet(GUIUtil::LoadWalletStyleSheet());
+    // Fusion + shared Vericonomy QSS (see GUIUtil::ApplyWalletStyleSheet).
+    GUIUtil::ApplyWalletStyleSheet();
 }
 
 BitcoinApplication::~BitcoinApplication()
@@ -431,6 +434,7 @@ static void SetupUIArgs()
     gArgs.AddArg("-min", "Start minimized", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     gArgs.AddArg("-resetguisettings", "Reset all settings changed in the GUI", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     gArgs.AddArg("-splash", strprintf("Show splash screen on startup (default: %u)", DEFAULT_SPLASHSCREEN), ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
+    gArgs.AddArg("-uidarkmode", "Use dark theme for the wallet UI (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
 #if ENABLE_DEV_HELPER_WINDOW
     gArgs.AddArg("-devedition", "Enable Developer Edition branding and tools (requires compile flag and master password for tools)", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
 #endif
@@ -440,10 +444,12 @@ static void SetupUIArgs()
 #if defined(Q_OS_LINUX)
 static void InitQtSslCertificates()
 {
+    InitCurlSsl();
+
+#ifndef QT_NO_SSL
     if (!QSslSocket::supportsSsl()) {
         return;
     }
-    InitCurlSsl();
 
     const std::string& cafile = GetSystemCaFile();
     if (!cafile.empty()) {
@@ -467,6 +473,7 @@ static void InitQtSslCertificates()
     if (!embeddedCerts.isEmpty()) {
         QSslSocket::addDefaultCaCertificates(embeddedCerts);
     }
+#endif
 }
 #endif
 
@@ -633,6 +640,7 @@ int GuiMain(int argc, char* argv[])
     GUIUtil::LogQtInfo();
     // Load GUI settings from QSettings
     app.createOptionsModel(gArgs.GetBoolArg("-resetguisettings", false));
+    GUIUtil::ApplyWalletStyleSheet();
 
     if (gArgs.GetBoolArg("-splash", DEFAULT_SPLASHSCREEN) && !gArgs.GetBoolArg("-min", false))
         app.createSplashScreen(networkStyle.data());

@@ -72,6 +72,7 @@ private:
     Ui::OptionsDialog *ui;
     OptionsModel *model;
     QDataWidgetMapper *mapper;
+    bool m_darkModeAtOpen{false};
 };
 
 #endif // BITCOIN_QT_OPTIONSDIALOG_H

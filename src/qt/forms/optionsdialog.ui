@@ -616,6 +616,16 @@
         </layout>
        </item>
        <item>
+        <widget class="QCheckBox" name="darkMode">
+         <property name="toolTip">
+          <string>Enable a dark color scheme for the wallet interface. Uncheck to return to light theme. Takes effect immediately.</string>
+         </property>
+         <property name="text">
+          <string>Dark &amp;theme</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <layout class="QHBoxLayout" name="horizontalLayout_3_Display">
          <item>
           <widget class="QLabel" name="thirdPartyTxUrlsLabel">

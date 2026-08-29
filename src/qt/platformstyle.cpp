@@ -117,7 +117,8 @@ QIcon PlatformStyle::SingleColorIcon(const QIcon& icon) const
 
 QIcon PlatformStyle::TextColorIcon(const QIcon& icon) const
 {
-    return ColorizeIcon(icon, TextColor());
+    // Read live palette so dark-mode toggles stay in sync (cached textColor is set at startup).
+    return ColorizeIcon(icon, QColor(QApplication::palette().color(QPalette::WindowText)));
 }
 
 const PlatformStyle *PlatformStyle::instantiate(const QString &platformId)

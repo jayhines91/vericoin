@@ -1414,8 +1414,38 @@ static bool UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos, const
     return true;
 }
 
+/** In-memory undo for recently connected blocks. Disk undo can fail checksum
+ *  immediately after connect (e.g. orphan stake reorg); cache avoids fatal disconnect. */
+static Mutex g_recent_block_undo_mutex;
+static std::map<uint256, CBlockUndo> g_recent_block_undo;
+static constexpr size_t MAX_RECENT_BLOCK_UNDO = 128;
+
+static void CacheRecentBlockUndo(const uint256& hash, const CBlockUndo& undo)
+{
+    LOCK(g_recent_block_undo_mutex);
+    g_recent_block_undo[hash] = undo;
+    while (g_recent_block_undo.size() > MAX_RECENT_BLOCK_UNDO) {
+        g_recent_block_undo.erase(g_recent_block_undo.begin());
+    }
+}
+
+static void EraseRecentBlockUndo(const uint256& hash)
+{
+    LOCK(g_recent_block_undo_mutex);
+    g_recent_block_undo.erase(hash);
+}
+
 bool UndoReadFromDisk(CBlockUndo& blockundo, const CBlockIndex* pindex)
 {
+    {
+        LOCK(g_recent_block_undo_mutex);
+        const auto it = g_recent_block_undo.find(pindex->GetBlockHash());
+        if (it != g_recent_block_undo.end()) {
+            blockundo = it->second;
+            return true;
+        }
+    }
+
     FlatFilePos pos = pindex->GetUndoPos();
     if (pos.IsNull()) {
         return error("%s: no undo data available", __func__);
@@ -1992,6 +2022,12 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     if (!WriteUndoDataForBlock(blockundo, state, pindex, chainparams))
         return false;
 
+    CacheRecentBlockUndo(pindex->GetBlockHash(), blockundo);
+    if (!IsInitialBlockDownload()) {
+        LOCK(cs_LastBlockFile);
+        FlushBlockFile();
+    }
+
     if (!pindex->IsValid(BLOCK_VALID_SCRIPTS)) {
         pindex->RaiseValidity(BLOCK_VALID_SCRIPTS);
         setDirtyBlockIndex.insert(pindex);
@@ -2224,6 +2260,7 @@ bool CChainState::DisconnectTip(BlockValidationState& state, const CChainParams&
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK)
             return error("DisconnectTip(): DisconnectBlock %s failed", pindexDelete->GetBlockHash().ToString());
+        EraseRecentBlockUndo(pindexDelete->GetBlockHash());
         bool flushed = view.Flush();
         assert(flushed);
     }

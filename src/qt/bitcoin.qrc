@@ -4,8 +4,11 @@
         <file alias="vrmstyle">res/vrm-style.qss</file>
         <file alias="vrcstyle">res/vrc-style.qss</file>
         <file alias="vericonomyshared">res/vericonomy-shared.qss</file>
+        <file alias="vericonomyshareddark">res/vericonomy-shared-dark.qss</file>
         <file alias="vrcchrome">res/vrc-chrome.qss</file>
+        <file alias="vrcchromedark">res/vrc-chrome-dark.qss</file>
         <file alias="vrmchrome">res/vrm-chrome.qss</file>
+        <file alias="vrmchromedark">res/vrm-chrome-dark.qss</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="bitcoin">res/icons/bitcoin.png</file>

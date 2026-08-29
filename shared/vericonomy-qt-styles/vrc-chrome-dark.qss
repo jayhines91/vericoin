@@ -1,0 +1,48 @@
+/** Vericoin dark chrome tint — layered on vericonomy-shared-dark.qss (all OS).
+ *  Source of truth: CodeRepo/shared/vericonomy-qt-styles/vrc-chrome-dark.qss */
+
+QMainWindow {
+    background-color: #3d4f5f;
+}
+
+QToolBar#mainToolBar {
+    background-color: #3d4f5f;
+    border-right: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+QWidget#central {
+    background-color: #2a5270;
+}
+
+QStatusBar,
+QWidget#statusBar {
+    background-color: #3d4f5f;
+}
+
+QProgressBar#progressBar,
+QProgressBar#syncProgressBar {
+    background-color: rgba(0, 0, 0, 0.35);
+}
+
+QProgressBar#progressBar::chunk,
+QProgressBar#syncProgressBar::chunk {
+    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: 0 #5eb8e8, stop: 0.5 #418bca, stop: 1 #2d6a9f);
+}
+
+QWidget#bgWidget {
+    background: rgba(45, 90, 122, 235);
+}
+
+QWidget#explorerBox,
+QWidget#twitterBox,
+QWidget#chatBox,
+QWidget#websiteBox {
+    background-color: #1e4263;
+}
+
+QWidget#explorerBox:hover,
+QWidget#twitterBox:hover,
+QWidget#chatBox:hover,
+QWidget#websiteBox:hover {
+    background-color: #163550;
+}

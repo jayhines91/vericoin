@@ -810,6 +810,14 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel)
             // initialize the disable state of the tray icon with the current value in the model.
             setTrayIconVisible(optionsModel->getHideTrayIcon());
         }
+        if (optionsModel) {
+            connect(optionsModel, &OptionsModel::darkModeChanged, this, [](bool) {
+                GUIUtil::ApplyWalletStyleSheet();
+                for (QWidget* widget : QApplication::topLevelWidgets()) {
+                    widget->update();
+                }
+            });
+        }
 
     } else {
         // Disable possibility to show main window via action
@@ -1007,7 +1015,7 @@ void BitcoinGUI::optionsClicked()
 
 void BitcoinGUI::closeOrMinimizeEvent()
 {
-#ifndef Q_OS_MAC // Ignored on Mac
+#ifndef Q_OS_MAC // Minimize-on-close is not offered on macOS; toolbar Exit always quits.
     if(clientModel && clientModel->getOptionsModel())
     {
         if(!clientModel->getOptionsModel()->getMinimizeOnClose())
@@ -1023,7 +1031,8 @@ void BitcoinGUI::closeOrMinimizeEvent()
         }
     }
 #else
-    QApplication::quit;
+    rpcConsole->close();
+    QApplication::quit();
 #endif
 }
 
@@ -1771,7 +1780,7 @@ void BitcoinGUI::updateProxyIcon()
     bool proxy_enabled = clientModel->getProxyInfo(ip_port);
 
     if (proxy_enabled) {
-        if (labelProxyIcon->pixmap() == nullptr) {
+        if (labelProxyIcon->pixmap(Qt::ReturnByValue).isNull()) {
             QString ip_port_q = QString::fromStdString(ip_port);
             labelProxyIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/proxy").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
             labelProxyIcon->setToolTip(tr("Proxy is <b>enabled</b>: %1").arg(ip_port_q));

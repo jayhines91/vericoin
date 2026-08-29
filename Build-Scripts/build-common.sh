@@ -165,24 +165,47 @@ docker_shared_preseed_mount_args() {
         "-e" "SHARED_DEPENDS_PRESEED=${DOCKER_SHARED_DEPENDS_PRESEED:-/shared/depends-preseed}"
 }
 
-# Docker: mount CodeRepo/shared at /shared so qt/res symlinks resolve in-container.
+# Prefer in-repo shared/ (GitHub clone); fall back to CodeRepo sibling layout.
+shared_styles_dir() {
+    local root="${1:-$BUILD_COMMON_ROOT}"
+    if [ -d "${root}/shared/vericonomy-qt-styles" ]; then
+        echo "${root}/shared/vericonomy-qt-styles"
+    elif [ -d "${root}/../shared/vericonomy-qt-styles" ]; then
+        echo "$(cd "${root}/../shared/vericonomy-qt-styles" && pwd)"
+    else
+        return 1
+    fi
+}
+
+# Docker: mount shared styles so qt/res symlinks resolve in-container (CodeRepo layout).
 docker_shared_styles_mount_args() {
     local root="${1:-$BUILD_COMMON_ROOT}"
-    local repo_shared
-    repo_shared="$(cd "${root}/../shared" && pwd)"
-    printf '%s\n' "-v" "${repo_shared}:/shared"
+    local styles_dir
+    styles_dir="$(shared_styles_dir "$root")" || return 0
+    printf '%s\n' "-v" "${styles_dir}:/shared/vericonomy-qt-styles"
 }
 
 docker_build_mount_args() {
     local root="${1:-$BUILD_COMMON_ROOT}"
-    local repo_shared preseed_real styles_dir
-    repo_shared="$(cd "${root}/../shared" && pwd)"
-    preseed_real="$(readlink -f "${repo_shared}/depends-preseed" 2>/dev/null || echo "${repo_shared}/depends-preseed")"
-    styles_dir="${repo_shared}/vericonomy-qt-styles"
-    printf '%s\n' \
-        "-v" "${preseed_real}:/shared/depends-preseed" \
-        "-v" "${styles_dir}:/shared/vericonomy-qt-styles" \
-        "-e" "SHARED_DEPENDS_PRESEED=${DOCKER_SHARED_DEPENDS_PRESEED:-/shared/depends-preseed}"
+    local preseed_real styles_dir
+    if [ -d "${root}/shared/depends-preseed" ]; then
+        preseed_real="$(readlink -f "${root}/shared/depends-preseed" 2>/dev/null || echo "${root}/shared/depends-preseed")"
+    else
+        local repo_shared
+        repo_shared="$(cd "${root}/../shared" && pwd)"
+        preseed_real="$(readlink -f "${repo_shared}/depends-preseed" 2>/dev/null || echo "${repo_shared}/depends-preseed")"
+    fi
+    styles_dir="$(shared_styles_dir "$root")" || styles_dir=""
+    if [ -n "$styles_dir" ]; then
+        printf '%s\n' \
+            "-v" "${preseed_real}:/shared/depends-preseed" \
+            "-v" "${styles_dir}:/shared/vericonomy-qt-styles" \
+            "-e" "SHARED_DEPENDS_PRESEED=${DOCKER_SHARED_DEPENDS_PRESEED:-/shared/depends-preseed}"
+    else
+        printf '%s\n' \
+            "-v" "${preseed_real}:/shared/depends-preseed" \
+            "-e" "SHARED_DEPENDS_PRESEED=${DOCKER_SHARED_DEPENDS_PRESEED:-/shared/depends-preseed}"
+    fi
 }
 
 run_pre_compile_checks() {
@@ -213,6 +236,7 @@ configure_platform_build() {
     # shellcheck disable=SC2086
     ../../configure --host="$host_triplet" --prefix="$dep" --with-gui=qt5 \
         --with-qt-bindir="$dep/native/bin" --with-qt-incdir="$dep/include" --with-qt-libdir="$dep/lib" \
+        --with-qt-plugindir="$dep/plugins" \
         --disable-bench --disable-tests --enable-reduce-exports \
         $configure_extra
 }

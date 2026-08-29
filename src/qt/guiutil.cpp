@@ -22,6 +22,9 @@
 #include <util/activitylog.h>
 #include <util/system.h>
 
+#include <QStyleFactory>
+#include <QTabWidget>
+
 #ifdef WIN32
 #ifdef _WIN32_IE
 #undef _WIN32_IE
@@ -39,6 +42,7 @@
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDoubleValidator>
@@ -56,6 +60,7 @@
 #include <QProgressDialog>
 #include <QScreen>
 #include <QSettings>
+#include <QStyle>
 #include <QSize>
 #include <QString>
 #include <QTextDocument> // for Qt::mightBeRichText
@@ -970,10 +975,59 @@ bool IsVericoin()
     return Params().IsVericoin();
 }
 
+bool DarkModeEnabled()
+{
+    if (gArgs.IsArgSet("-uidarkmode")) {
+        return gArgs.GetBoolArg("-uidarkmode", false);
+    }
+    return QSettings().value("fDarkMode", false).toBool();
+}
+
+QColor TxColorPositive()
+{
+    return DarkModeEnabled() ? QColor(90, 200, 95) : QColor(53, 155, 55);
+}
+
+QColor TxColorNegative()
+{
+    return DarkModeEnabled() ? QColor(255, 110, 110) : QColor(255, 0, 0);
+}
+
+QColor TxColorUnconfirmed()
+{
+    return DarkModeEnabled() ? QColor(154, 168, 184) : QColor(128, 128, 128);
+}
+
+QColor TxColorBareAddress()
+{
+    return DarkModeEnabled() ? QColor(170, 184, 200) : QColor(140, 140, 140);
+}
+
+QColor TxColorPrimaryText()
+{
+    return DarkModeEnabled() ? QColor(228, 233, 239) : QColor(0, 0, 0);
+}
+
+QColor TxColorSecondaryText()
+{
+    return DarkModeEnabled() ? QColor(197, 206, 214) : QColor(102, 102, 102);
+}
+
+QColor TxOverviewRowFill()
+{
+    return DarkModeEnabled() ? QColor(42, 52, 65) : QColor(230, 230, 230);
+}
+
+QColor TxOverviewRowBorder()
+{
+    return DarkModeEnabled() ? QColor(61, 74, 88) : QColor(217, 217, 217);
+}
+
 QString LoadWalletStyleSheet()
 {
     // Layer 1: vericonomy-shared.qss (structure + wallet UI, VRC + VRM, all OS)
     // Layer 2: vrc-chrome.qss or vrm-chrome.qss (coin tint only)
+    // Layer 3 (optional): *-dark.qss overrides when dark mode is enabled
     // Applied on QApplication in BitcoinApplication::setupPlatformStyle().
     const auto readResource = [](const char* path) -> QString {
         QFile file(path);
@@ -986,7 +1040,93 @@ QString LoadWalletStyleSheet()
     QString sheet = readResource(":/vericonomyshared");
     // Compile-time coin flag — Params() is not initialized yet when setupPlatformStyle() loads QSS.
     sheet += readResource(::IsVericoin ? ":/vrcchrome" : ":/vrmchrome");
+    if (DarkModeEnabled()) {
+        sheet += readResource(":/vericonomyshareddark");
+        sheet += readResource(::IsVericoin ? ":/vrcchromedark" : ":/vrmchromedark");
+    }
     return sheet;
+}
+
+static void EnsureFusionStyle(QApplication* app)
+{
+    if (app == nullptr) {
+        return;
+    }
+    if (app->style()->objectName().toLower() != QLatin1String("fusion")) {
+        app->setStyle(QStyleFactory::create("Fusion"));
+    }
+}
+
+static void ApplyThemePalette(QApplication* app)
+{
+    QPalette pal = app->style()->standardPalette();
+    if (DarkModeEnabled()) {
+        const QColor window(42, 52, 65);
+        const QColor base(30, 38, 48);
+        const QColor text(228, 233, 239);
+        const QColor muted(154, 168, 184);
+        pal.setColor(QPalette::Window, window);
+        pal.setColor(QPalette::Base, base);
+        pal.setColor(QPalette::Button, window);
+        pal.setColor(QPalette::AlternateBase, QColor(35, 45, 58));
+        pal.setColor(QPalette::WindowText, text);
+        pal.setColor(QPalette::Text, text);
+        pal.setColor(QPalette::ButtonText, text);
+        pal.setColor(QPalette::PlaceholderText, muted);
+        pal.setColor(QPalette::ToolTipBase, window);
+        pal.setColor(QPalette::ToolTipText, text);
+    } else {
+        const QColor text(70, 80, 90);
+        pal.setColor(QPalette::Window, QColor(255, 255, 255));
+        pal.setColor(QPalette::Base, QColor(255, 255, 255));
+        pal.setColor(QPalette::Button, QColor(245, 247, 250));
+        pal.setColor(QPalette::WindowText, text);
+        pal.setColor(QPalette::Text, text);
+        pal.setColor(QPalette::ButtonText, text);
+        pal.setColor(QPalette::PlaceholderText, QColor(107, 119, 133));
+        pal.setColor(QPalette::ToolTipBase, QColor(255, 255, 255));
+        pal.setColor(QPalette::ToolTipText, text);
+    }
+    app->setPalette(pal);
+}
+
+void ApplyWalletStyleSheet()
+{
+    if (QApplication* app = qobject_cast<QApplication*>(QCoreApplication::instance())) {
+        EnsureFusionStyle(app);
+        ApplyThemePalette(app);
+        app->setStyleSheet(LoadWalletStyleSheet());
+    }
+}
+
+void EnableStyledBackground(QWidget* widget, bool recursive)
+{
+    if (widget == nullptr) {
+        return;
+    }
+    widget->setAttribute(Qt::WA_StyledBackground, true);
+    if (!recursive) {
+        return;
+    }
+    for (QWidget* child : widget->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly)) {
+        EnableStyledBackground(child, true);
+    }
+}
+
+void PolishModernShell(QWidget* root)
+{
+    if (root == nullptr) {
+        return;
+    }
+    EnableStyledBackground(root, true);
+    if (QTabWidget* tabs = root->findChild<QTabWidget*>()) {
+        EnableStyledBackground(tabs, true);
+        for (int i = 0; i < tabs->count(); ++i) {
+            if (QWidget* page = tabs->widget(i)) {
+                EnableStyledBackground(page, true);
+            }
+        }
+    }
 }
 
 QString GetCoinName()

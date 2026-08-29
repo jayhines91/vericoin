@@ -50,6 +50,7 @@ public:
         DatabaseCache,          // int
         SpendZeroConfChange,    // bool
         Listen,                 // bool
+        DarkMode,               // bool
         OptionIDRowCount,
     };
 
@@ -69,6 +70,7 @@ public:
     int getDisplayUnit() const { return nDisplayUnit; }
     QString getThirdPartyTxUrls() const { return strThirdPartyTxUrls; }
     bool getCoinControlFeatures() const { return fCoinControlFeatures; }
+    bool getDarkMode() const { return fDarkMode; }
     const QString& getOverriddenByCommandLine() { return strOverriddenByCommandLine; }
 
     /* Restart flag helper */
@@ -87,6 +89,7 @@ private:
     int nDisplayUnit;
     QString strThirdPartyTxUrls;
     bool fCoinControlFeatures;
+    bool fDarkMode;
     /* settings that were overridden by command-line */
     QString strOverriddenByCommandLine;
 
@@ -99,6 +102,7 @@ Q_SIGNALS:
     void displayUnitChanged(int unit);
     void coinControlFeaturesChanged(bool);
     void hideTrayIconChanged(bool);
+    void darkModeChanged(bool enabled);
 };
 
 #endif // BITCOIN_QT_OPTIONSMODEL_H

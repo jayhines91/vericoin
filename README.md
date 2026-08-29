@@ -23,9 +23,19 @@ information or see https://opensource.org/licenses/MIT.
 Development Process
 -------------------
 
+### Branches
+
+| Branch | Version | Purpose |
+|--------|---------|---------|
+| **`master`** | 2.0.x | Original Vericoin — stable pre-2.1 lineage |
+| **`vericoin-2.1`** | 2.1.x | Current release line (2.1.1 beta and forward) |
+
+Use **`vericoin-2.1`** for all 2.1.x work. The legacy branch `vericoin-2.1.0` on GitHub
+(2.2.5 experimental) is not part of this release line and should be ignored.
+
 The `master` branch is regularly built and tested, but is not guaranteed to be
-completely stable. [Tags](https://github.com/VeriConomy/vericoin/tags) are created
-regularly to indicate new official, stable release versions of Vericoin.
+completely stable. [Tags](https://github.com/jayhines91/vericoin/tags) mark official
+release versions.
 
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
 and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).

@@ -42,6 +42,7 @@ check "bootstrap chain sync pause in validation" \
 
 # GUI: shared Vericonomy styling (VRC + VRM, all platforms).
 check "shared QSS source of truth exists" \
+    test -f "${ROOT}/shared/vericonomy-qt-styles/vericonomy-shared.qss" || \
     test -f ../shared/vericonomy-qt-styles/vericonomy-shared.qss
 
 check "vericoin res symlinks to shared QSS" \
@@ -55,14 +56,14 @@ check "shared status bar uses sidebar gray #586A7A" \
 
 check "shared sync progress bar structure" \
     rg -q 'QProgressBar#syncProgressBar' src/qt/res/vericonomy-shared.qss && \
-    rg -q 'border-radius: 10px' src/qt/res/vericonomy-shared.qss
+    rg -A6 'QProgressBar#syncProgressBar \{' src/qt/res/vericonomy-shared.qss | rg -q 'border-radius:'
 
 check "vericonomy-shared sidebar uses #586A7A" \
     rg -q 'QToolBar#mainToolBar' -A2 src/qt/res/vericonomy-shared.qss && \
     rg -q '#586A7A' src/qt/res/vericonomy-shared.qss
 
 check "stylesheet applied on QApplication (all OS)" \
-    rg -q 'qApp->setStyleSheet\(GUIUtil::LoadWalletStyleSheet\(\)\)' src/qt/bitcoin.cpp
+    rg -q 'GUIUtil::ApplyWalletStyleSheet\(\)' src/qt/bitcoin.cpp
 
 check "vrc-chrome progress chunk tint" \
     rg -q 'QProgressBar#syncProgressBar::chunk' src/qt/res/vrc-chrome.qss

@@ -24,6 +24,7 @@
 #include <QIntValidator>
 #include <QLocale>
 #include <QMessageBox>
+#include <QSignalBlocker>
 #include <QSystemTrayIcon>
 #include <QTimer>
 
@@ -34,6 +35,11 @@ OptionsDialog::OptionsDialog(QWidget *parent, bool enableWallet) :
     mapper(nullptr)
 {
     ui->setupUi(this);
+
+    GUIUtil::PolishModernShell(this);
+
+    ui->openBitcoinConfButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    ui->resetButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
 
     // translate
     ui->mapPortUpnp->setToolTip(ui->mapPortUpnp->toolTip().arg(GUIUtil::GetCoinName()));
@@ -159,12 +165,33 @@ void OptionsDialog::setModel(OptionsModel *_model)
 
         mapper->setModel(_model);
         setMapper();
-        mapper->toFirst();
+        {
+            QSignalBlocker blocker(ui->darkMode);
+            mapper->toFirst();
+        }
+
+        m_darkModeAtOpen = _model->getDarkMode();
+        if (strLabel.contains(QStringLiteral("-uidarkmode"))) {
+            ui->darkMode->setEnabled(false);
+            ui->darkMode->setToolTip(tr(
+                "Dark mode is controlled by the -uidarkmode command-line option or config file."));
+        } else {
+            ui->darkMode->setEnabled(true);
+            ui->darkMode->setToolTip(tr(
+                "Enable a dark color scheme for the wallet interface. "
+                "Uncheck to return to light theme. Takes effect immediately."));
+        }
 
         updateDefaultProxyNets();
     }
 
     /* warn when one of the following settings changes by user action (placed here so init via mapper doesn't trigger them) */
+
+    disconnect(ui->darkMode, &QCheckBox::toggled, this, nullptr);
+    connect(ui->darkMode, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (!model) return;
+        model->setData(model->index(OptionsModel::DarkMode), enabled);
+    });
 
     /* Main */
     connect(ui->databaseCache, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &OptionsDialog::showRestartWarning);
@@ -225,6 +252,7 @@ void OptionsDialog::setMapper()
     /* Display */
     mapper->addMapping(ui->lang, OptionsModel::Language);
     mapper->addMapping(ui->unit, OptionsModel::DisplayUnit);
+    mapper->addMapping(ui->darkMode, OptionsModel::DarkMode);
     mapper->addMapping(ui->thirdPartyTxUrls, OptionsModel::ThirdPartyTxUrls);
 }
 
@@ -272,6 +300,9 @@ void OptionsDialog::on_okButton_clicked()
 
 void OptionsDialog::on_cancelButton_clicked()
 {
+    if (model && model->getDarkMode() != m_darkModeAtOpen) {
+        model->setData(model->index(OptionsModel::DarkMode), m_darkModeAtOpen);
+    }
     reject();
 }
 

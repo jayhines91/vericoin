@@ -834,9 +834,6 @@
              <property name="toolTip">
               <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Click to start/stop&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
              </property>
-             <property name="styleSheet">
-              <string notr="true">QPushButton { background: white;}</string>
-             </property>
              <property name="text">
               <string/>
              </property>
